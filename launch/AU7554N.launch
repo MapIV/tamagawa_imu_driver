@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+  <node pkg="tamagawa_imu_ros" name="tag_driver" type="tag_driver" args="/dev/ttyUSB0"/>
+  <param name="/tamagawa/imu_type" type="str" value="AU7554N" />
+</launch>
