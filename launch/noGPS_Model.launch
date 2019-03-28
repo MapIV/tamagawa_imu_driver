@@ -2,5 +2,5 @@
 
 <launch>
   <node pkg="tamagawa_imu_ros" name="tag_driver" type="tag_driver" args="/dev/ttyUSB0"/>
-  <param name="/tamagawa/imu_type" type="str" value="TAG264" />
+  <param name="/tamagawa/imu_type" type="str" value="noGPS" />
 </launch>

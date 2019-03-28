@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+  <node pkg="tamagawa_imu_ros" name="tag_driver" type="tag_driver" args="/dev/serial/by-id/usb-CONTEC_COM-1_USB_H_81122C97-if00-port0"/>
+  <param name="/tamagawa/imu_type" type="str" value="withGPS" />
+</launch>

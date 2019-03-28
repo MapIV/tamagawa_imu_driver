@@ -51,7 +51,7 @@ int main(int argc, char **argv){
     ros::NodeHandle n;
     ros::NodeHandle pn("~");
     ros::Publisher pub1 = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
-    std::string imu_type = "TAG264";
+    std::string imu_type = "withGPS";
     pn.getParam("/tamagawa/imu_type",imu_type);
 
     //launchにデバイスが定義されているときは、そのデバイスを使用する
@@ -94,7 +94,7 @@ int main(int argc, char **argv){
            buf[8] == ','
         ){
 
-            if(strcmp(imu_type.c_str(),"AU7554N") == 0){
+            if(strcmp(imu_type.c_str(),"noGPS") == 0){
               //data_size = ((buf[9] << 8) & 0x0000FF00) | (buf[10] & 0x000000FF);
               counter = ((buf[11] << 24) & 0xFF000000) | ((buf[12] << 16) & 0x00FF0000) | ((buf[13] << 8) & 0x0000FF00) | (buf[14] & 0x000000FF);
               //status = ((buf[15] << 8) & 0x0000FF00) | (buf[16] & 0x000000FF);
@@ -124,7 +124,7 @@ int main(int argc, char **argv){
               pub1.publish(imu_msg);
             }
 
-            else if(strcmp(imu_type.c_str(),"TAG264") == 0){
+            else if(strcmp(imu_type.c_str(),"withGPS") == 0){
               //data_size = ((buf[9] << 8) & 0x0000FF00) | (buf[10] & 0x000000FF);
               counter = ((buf[11] << 8) & 0x0000FF00) | (buf[12] & 0x000000FF);
               //status = ((buf[13] << 8) & 0x0000FF00) | (buf[14] & 0x000000FF);
@@ -133,11 +133,11 @@ int main(int argc, char **argv){
               angular_velocity_y_raw = ((((buf[17] << 8) & 0xFFFFFF00) | (buf[18] & 0x000000FF)));
               angular_velocity_y = angular_velocity_y_raw * (200/pow(2,15)) * M_PI / 180; //LSB & unit [deg/s] => [rad/s]
               angular_velocity_z_raw = ((((buf[19] << 8) & 0xFFFFFF00) | (buf[20] & 0x000000FF)));
-              angular_velocity_z = angular_velocity_z_raw * (200/pow(2,15)) * M_PI / 180; //LSB & unit [deg/s] => [rad/s]
+              angular_velocity_z = -1 * angular_velocity_z_raw * (200/pow(2,15)) * M_PI / 180; //LSB & unit [deg/s] => [rad/s]
               acceleration_x_raw = ((((buf[21] << 8) & 0xFFFFFF00) | (buf[22] & 0x000000FF)));
-              acceleration_x = acceleration_x_raw * (100/pow(2,15)); //LSB & unit [m/s^2]
+              acceleration_x = -1 * acceleration_x_raw * (100/pow(2,15)); //LSB & unit [m/s^2]
               acceleration_y_raw = ((((buf[23] << 8) & 0xFFFFFF00) | (buf[24] & 0x000000FF)));
-              acceleration_y = acceleration_y_raw * (100/pow(2,15)); //LSB & unit [m/s^2]
+              acceleration_y = -1 * acceleration_y_raw * (100/pow(2,15)); //LSB & unit [m/s^2]
               acceleration_z_raw = ((((buf[25] << 8) & 0xFFFFFF00) | (buf[26] & 0x000000FF)));
               acceleration_z = acceleration_z_raw * (100/pow(2,15)); //LSB & unit [m/s^2]
 
