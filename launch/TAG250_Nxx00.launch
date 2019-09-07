@@ -2,7 +2,7 @@
 
 <launch>
 
-  <node pkg="tamagawa_imu_ros" name="tag_driver" type="tag_driver" args="/dev/ttyUSB0"/>
+  <node pkg="tamagawa_imu_driver" name="tag_driver" type="tag_driver" args="/dev/ttyUSB0"/>
   <param name="/tamagawa_imu/frame_id" type="str" value="imu" />
   <param name="/tamagawa_imu/type" type="str" value="noGPS" />
   <param name="/tamagawa_imu/rate" type="str" value="100" />
