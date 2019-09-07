@@ -1,5 +1,7 @@
 # tamagawa_imu_ros
 
+[![CircleCI](https://circleci.com/gh/MapIV/tamagawa_imu_driver.svg?style=svg)](https://circleci.com/gh/MapIV/tamagawa_imu_driver)
+
 ## Overview
 
 This program is a driver for TAMAGAWA SEIKI IMU.
