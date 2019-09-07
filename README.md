@@ -1,10 +1,10 @@
-# tamagawa_imu_ros
+# tamagawa_imu_driver (Beta version)
 
-[![CircleCI](https://circleci.com/gh/MapIV/tamagawa_imu_driver.svg?style=svg)](https://circleci.com/gh/MapIV/tamagawa_imu_driver)
+[![CircleCI](https://circleci.com/gh/MapIV/tamagawa_imu_driver/tree/master.svg?style=svg)](https://circleci.com/gh/MapIV/tamagawa_imu_driver/tree/master)
 
 ## Overview
 
-This program is a driver for TAMAGAWA SEIKI IMU.
+This package contains ROS driver for TAMAGAWA SEIKI IMUs.
 
 ## Usage
 
