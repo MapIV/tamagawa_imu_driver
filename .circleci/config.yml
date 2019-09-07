@@ -20,7 +20,9 @@ jobs:
           name: Build
           command: |
             source /opt/ros/kinetic/setup.bash
-            cd src
+            mkdir -p /tmp/ws/src
+            ln -s `pwd` /tmp/ws/src/package
+            cd /tmp/ws/src
             catkin_init_workspace
             cd ../
             catkin_make -DCMAKE_BUILD_TYPE=Release -j1
