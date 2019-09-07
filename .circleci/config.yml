@@ -13,7 +13,6 @@ jobs:
           name: Install catkin
           command: |
             apt-get update -qq && apt-get install -y python-catkin-tools
-            cd ros
             source /opt/ros/kinetic/setup.bash
             rosdep install --from-paths src --ignore-src -y --rosdistro kinetic
 
