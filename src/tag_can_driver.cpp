@@ -50,6 +50,9 @@ void receive_CAN(const can_msgs::Frame::ConstPtr& msg){
 
   if(msg->id == 0x319)
   {
+    imu_msg.header.frame_id = "imu";
+    imu_msg.header.stamp = ros::Time::now();
+    
     counter = msg->data[1] + (msg->data[0] << 8);
     angular_velocity_x_raw = msg->data[3] + (msg->data[2] << 8);
     imu_msg.angular_velocity.x =
@@ -71,8 +74,6 @@ void receive_CAN(const can_msgs::Frame::ConstPtr& msg){
     acceleration_z_raw = msg->data[7] + (msg->data[6] << 8);
     imu_msg.linear_acceleration.z = acceleration_z_raw * (100 / pow(2, 15));  // LSB & unit [m/s^2]
 
-    imu_msg.header.frame_id = "imu";
-    imu_msg.header.stamp = ros::Time::now();
     imu_msg.orientation.x = 0.0;
     imu_msg.orientation.y = 0.0;
     imu_msg.orientation.z = 0.0;
