@@ -3,8 +3,8 @@ project(tamagawa_imu_driver)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
-  rospy
   sensor_msgs
+  can_msgs
 )
 
 catkin_package(
@@ -14,5 +14,8 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_executable(tag_driver src/tag_driver.cpp)
-target_link_libraries(tag_driver ${catkin_LIBRARIES})
+add_executable(tag_serial_driver src/tag_serial_driver.cpp)
+target_link_libraries(tag_serial_driver ${catkin_LIBRARIES})
+
+add_executable(tag_can_driver src/tag_can_driver.cpp)
+target_link_libraries(tag_can_driver ${catkin_LIBRARIES})
