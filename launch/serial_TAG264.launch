@@ -2,12 +2,10 @@
 
 <launch>
 
-  <node pkg="tamagawa_imu_driver" name="tag_driver" type="tag_driver" args="/dev/ttyUSB0"/>
+  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" args="/dev/ttyUSB0"/>
   <param name="/tamagawa_imu/frame_id" type="str" value="imu" />
   <param name="/tamagawa_imu/type" type="str" value="withGPS" />
   <param name="/tamagawa_imu/rate" type="str" value="50" />
   <param name="/tamagawa_imu/publish_air_pressure" type="bool" value="true" />
-  <param name="/tamagawa_imu/imu_topic_name" type="str" value="/imu/data_raw" />
-  <param name="/tamagawa_imu/air_pressure_topic_name" type="str" value="/air_pressure" />
 
 </launch>
