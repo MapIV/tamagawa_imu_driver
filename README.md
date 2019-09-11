@@ -6,7 +6,13 @@
 
 This package contains ROS driver for TAMAGAWA SEIKI IMUs.
 
-## Usage (Serial communication)
+## Install
+
+This package requires can_msgs.
+
+		sudo apt-get install ros-kinetic-can-msgs  
+
+## Usage (Serial)
 1)Connect the serial-USB converter to the IMU.
 
 
@@ -37,7 +43,7 @@ ex)
 
 The arguments can be anything.
 
-## Usage (CAN communication)
+## Usage (CAN)
 
 1)Use [socketcan_interface](http://wiki.ros.org/socketcan_interface) etc. to publish the IMU CAN signal with the topic name /can/imu with the data type can_msgs/Frame.msg.  
 
