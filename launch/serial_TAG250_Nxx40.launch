@@ -2,10 +2,6 @@
 
 <launch>
 
-  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" args="/dev/ttyUSB0"/>
-  <param name="/tamagawa_imu/frame_id" type="str" value="imu" />
-  <param name="/tamagawa_imu/type" type="str" value="withGPS" />
-  <param name="/tamagawa_imu/rate" type="str" value="100" />
-  <param name="/tamagawa_imu/publish_air_pressure" type="bool" value="false" />
+  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" args="/dev/ttyUSB0" "withGPS" "100"/>
 
 </launch>

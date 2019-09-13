@@ -32,7 +32,6 @@
 
 #include "ros/ros.h"
 #include "sensor_msgs/Imu.h"
-#include "sensor_msgs/FluidPressure.h"
 #include "std_msgs/Int32.h"
 #include <string>
 #include <unistd.h>
@@ -42,59 +41,38 @@
 #include <stdio.h>
 #include <signal.h>
 
-// Parameter default value
-std::string frame_id = "imu";
+#include <sys/ioctl.h>
+
+std::string device = "/dev/ttyUSB0";
 std::string imu_type = "noGPS";
 std::string rate = "50";
-bool publish_air_pressure = "false";
-
-std::string imu_type_last = "noGPS";
-std::string rate_last = "50";
-bool publish_air_pressure_last = "false";
 
 struct termios old_conf_tio;
 struct termios conf_tio;
 
 int fd;
-int data_size = 0;
-int counter = 0;
-int status = 0;
-int raw_data = 0;
-
-/*
-double roll_angle = 0.0;
-double pitch_angle = 0.0;
-double heading_angle = 0.0;
-double pressure_altitude = 0.0;
-*/
+int counter;
+int raw_data;
 
 sensor_msgs::Imu imu_msg;
-sensor_msgs::FluidPressure pressure_msg;
 
 int serial_setup(const char* device)
 {
-  int fd = open(device, O_RDWR | O_NOCTTY);
+  int fd=open(device,O_RDWR);
   fcntl(fd, F_SETFL, 0);
-  tcgetattr(fd, &conf_tio);
+  tcsetattr(fd, TCSANOW, &conf_tio);
 
   speed_t BAUDRATE = B115200;
-  cfsetispeed(&conf_tio, BAUDRATE);
-  cfsetospeed(&conf_tio, BAUDRATE);
 
-  conf_tio.c_cflag |= CREAD | CLOCAL;
-  conf_tio.c_iflag &= ~IGNBRK;
-  conf_tio.c_lflag = 0;
-  conf_tio.c_oflag = 0;
   conf_tio.c_cc[VMIN] = 1;
   conf_tio.c_cc[VTIME] = 0;
-  conf_tio.c_iflag &= ~(IXON | IXOFF | IXANY);
-  conf_tio.c_cflag |= (CLOCAL | CREAD);
-  conf_tio.c_cflag &= ~(PARENB | PARODD);
-  conf_tio.c_cflag |= 0;
-  conf_tio.c_cflag &= ~CSTOPB;
-  conf_tio.c_cflag &= ~CRTSCTS;
-  conf_tio.c_iflag &= ~(ICRNL | IGNCR | INLCR);
-  conf_tio.c_oflag &= ~(ONLCR | OCRNL);
+
+  conf_tio.c_iflag = IXON | IXOFF ;
+  conf_tio.c_cflag = CLOCAL | CREAD | CSIZE | CS8;
+  conf_tio.c_oflag = ONLCR | OCRNL;
+
+  cfsetispeed(&conf_tio, BAUDRATE);
+  cfsetospeed(&conf_tio, BAUDRATE);
 
   tcsetattr(fd, TCSANOW, &conf_tio);
 
@@ -123,40 +101,6 @@ void receive_heading_reset_req(const std_msgs::Int32::ConstPtr& msg)
   ROS_INFO("Send Heading reset Request:%s", heading_reset_req);
 }
 
-void timer_callback(const ros::TimerEvent&)
-{
-  if(imu_type != imu_type_last || rate != rate_last || publish_air_pressure != publish_air_pressure_last)
-  {
-    // Data output request to IMU
-    // Model without barometric pressure sensor uses BIN
-    if (publish_air_pressure == false)
-    {
-      char lvl_req[] = "$TSC,LVL*3E\x0d\x0a";  // Command operation in leveling mode
-      int lvl_req_data = write(fd, lvl_req, sizeof(lvl_req));
-      ros::Duration(0.1).sleep();
-      char bin_req[32];
-      sprintf(bin_req, "$TSC,BIN,%s\x0d\x0a", rate.c_str());
-      int bin_req_data = write(fd, bin_req, sizeof(bin_req));
-      ROS_INFO("request:%s", bin_req);
-    }
-
-    // Model with barometric pressure sensor uses BIN2
-    else if (publish_air_pressure == true)
-    {
-      char lvl_req[] = "$TSC,LVL*3E\x0d\x0a";  // Command operation in leveling mode
-      int lvl_req_data = write(fd, lvl_req, sizeof(lvl_req));
-      ros::Duration(0.1).sleep();
-      char bin_req[32];
-      sprintf(bin_req, "$TSC,BIN2,%s\x0d\x0a", rate.c_str());
-      int bin_req_data = write(fd, bin_req, sizeof(bin_req));
-      ROS_INFO("request:%s", bin_req);
-    }
-  }
-  imu_type_last = imu_type;
-  rate_last = rate;
-  publish_air_pressure_last = publish_air_pressure;
-}
-
 void shutdown_cmd(int sig)
 {
   tcsetattr(fd, TCSANOW, &old_conf_tio);  // Revert to previous settings
@@ -169,235 +113,158 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "tag_serial_driver", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
-  ros::NodeHandle pn("~");
-
-  pn.getParam("/tamagawa_imu/frame_id", frame_id);
-  pn.getParam("/tamagawa_imu/type", imu_type);
-  pn.getParam("/tamagawa_imu/rate", rate);
-  pn.getParam("/tamagawa_imu/publish_air_pressure", publish_air_pressure);
-
-  ros::Publisher pub1 = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
-  ros::Publisher pub2 = n.advertise<sensor_msgs::FluidPressure>("/air_pressure", 1000);
+  ros::Publisher pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
   ros::Subscriber sub1 = n.subscribe("/tamagawa_imu/receive_ver_req", 10, receive_ver_req);
   ros::Subscriber sub2 = n.subscribe("/tamagawa_imu/receive_offset_cancel_req", 10, receive_offset_cancel_req);
   ros::Subscriber sub3 = n.subscribe("/tamagawa_imu/receive_heading_reset_req", 10, receive_heading_reset_req);
-  ros::Timer timer = n.createTimer(ros::Duration(0.1), timer_callback);
 
   tcgetattr(fd, &old_conf_tio);  // Last setting value retention
 
   // Use configured device
-  if (argc == 2)
+  if (argc == 4)
   {
+    device = argv[1];
     fd = serial_setup(argv[1]);
+    imu_type = argv[2];
+    rate = argv[3];
+
+    if (fd < 0)
+    {
+      ROS_ERROR("device not found %s", argv[1]);
+      ros::shutdown();
+    }
+
+    if (imu_type != "withGPS" && imu_type != "noGPS")
+    {
+      ROS_ERROR("Must be withGPS or noGPS");
+      ros::shutdown();
+    }
+
+  }
+  else if (argc == 3)
+  {
+    device = argv[1];
+    fd = serial_setup(argv[1]);
+    imu_type = argv[2];
+
+    if (fd < 0)
+    {
+      ROS_ERROR("device not found %s", argv[1]);
+      ros::shutdown();
+    }
+
+    if (imu_type != "withGPS" && imu_type != "noGPS")
+    {
+      ROS_ERROR("Must be withGPS or noGPS");
+      ros::shutdown();
+    }
+  }
+  else if (argc == 2)
+  {
+    device = argv[1];
+    fd = serial_setup(argv[1]);
+
     if (fd < 0)
     {
       ROS_ERROR("device not found %s", argv[1]);
       ros::shutdown();
     }
   }
-  // Device when not set
   else
   {
-    char device[] = "/dev/ttyUSB0";
-    fd = serial_setup(device);
+    fd = serial_setup(device.c_str());
     if (fd < 0)
     {
-      ROS_ERROR("device not found %s", device);
+      ROS_ERROR("device not found %s", device.c_str());
       ros::shutdown();
     }
   }
 
+  ROS_INFO("device=%s imu_type=%s rate=%s", device.c_str(),imu_type.c_str(),rate.c_str());
+
   // Data output request to IMU
-  // Model without barometric pressure sensor uses BIN
-  if (publish_air_pressure == false)
+  char bin_req[32];
+  memset(bin_req, 0x00, sizeof(bin_req));
+  sprintf(bin_req, "$TSC,BIN,%s\x0d\x0a", rate.c_str());
+  int bin_req_data = write(fd, bin_req, sizeof(bin_req));
+  ROS_INFO("request:%s", bin_req);
+
+  ros::Rate loop_rate(atoi(rate.c_str())*1.5);
+
+  imu_msg.orientation.x = 0.0;
+  imu_msg.orientation.y = 0.0;
+  imu_msg.orientation.z = 0.0;
+  imu_msg.orientation.w = 1.0;
+
+  char buf[512];
+  int len;
+  memset(buf, 0x00, sizeof(buf));
+
+  while (ros::ok() && (len = read(fd, buf, sizeof(buf)) > 0))
   {
-    char lvl_req[] = "$TSC,LVL*3E\x0d\x0a";  // Command operation in leveling mode
-    int lvl_req_data = write(fd, lvl_req, sizeof(lvl_req));
-    ros::Duration(0.1).sleep();
-    char bin_req[32];
-    sprintf(bin_req, "$TSC,BIN,%s\x0d\x0a", rate.c_str());
-    int bin_req_data = write(fd, bin_req, sizeof(bin_req));
-    ROS_INFO("request:%s", bin_req);
-  }
 
-  // Model with barometric pressure sensor uses BIN2
-  else if (publish_air_pressure == true)
-  {
-    char lvl_req[] = "$TSC,LVL*3E\x0d\x0a";  // Command operation in leveling mode
-    int lvl_req_data = write(fd, lvl_req, sizeof(lvl_req));
-    ros::Duration(0.1).sleep();
-    char bin_req[32];
-    sprintf(bin_req, "$TSC,BIN2,%s\x0d\x0a", rate.c_str());
-    int bin_req_data = write(fd, bin_req, sizeof(bin_req));
-    ROS_INFO("request:%s", bin_req);
-  }
+    //ROS_INFO("%s",buf);
 
-  ros::Duration(0.1).sleep();
-  ros::Rate loop_rate(500);
-
-  while (ros::ok())
-  {
-    char buf[255];
-    int recv_data = read(fd, buf, sizeof(buf));
-
-    // ROS_INFO("%s",buf);
-
-    if (recv_data > 0)
+    if (len > 0)
     {
-      if (strcmp(imu_type.c_str(), "noGPS") == 0)
-      {
         if (buf[5] == 'B' && buf[6] == 'I' && buf[7] == 'N' && buf[8] == ',')
         {
-          imu_msg.header.frame_id = frame_id;
+          imu_msg.header.frame_id = "imu";
           imu_msg.header.stamp = ros::Time::now();
 
-          data_size = ((buf[9] << 8) & 0x0000FF00) | (buf[10] & 0x000000FF);
-          counter = ((buf[11] << 24) & 0xFF000000) | ((buf[12] << 16) & 0x00FF0000) | ((buf[13] << 8) & 0x0000FF00) |
-                    (buf[14] & 0x000000FF);
-          status = ((buf[15] << 8) & 0x0000FF00) | (buf[16] & 0x000000FF);
-          raw_data = ((((buf[17] << 8) & 0xFFFFFF00) | (buf[18] & 0x000000FF)));
-          imu_msg.angular_velocity.x =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[19] << 8) & 0xFFFFFF00) | (buf[20] & 0x000000FF)));
-          imu_msg.angular_velocity.y =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[21] << 8) & 0xFFFFFF00) | (buf[22] & 0x000000FF)));
-          imu_msg.angular_velocity.z =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[23] << 8) & 0xFFFFFF00) | (buf[24] & 0x000000FF)));
-          imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((buf[25] << 8) & 0xFFFFFF00) | (buf[26] & 0x000000FF)));
-          imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((buf[27] << 8) & 0xFFFFFF00) | (buf[28] & 0x000000FF)));
-          imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+          if (strcmp(imu_type.c_str(), "noGPS") == 0)
+          {
+            counter = ((buf[11] << 24) & 0xFF000000) | ((buf[12] << 16) & 0x00FF0000) | ((buf[13] << 8) & 0x0000FF00) |
+                      (buf[14] & 0x000000FF);
+            raw_data = ((((buf[17] << 8) & 0xFFFFFF00) | (buf[18] & 0x000000FF)));
+            imu_msg.angular_velocity.x =
+                raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data = ((((buf[19] << 8) & 0xFFFFFF00) | (buf[20] & 0x000000FF)));
+            imu_msg.angular_velocity.y =
+                raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data = ((((buf[21] << 8) & 0xFFFFFF00) | (buf[22] & 0x000000FF)));
+            imu_msg.angular_velocity.z =
+                raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data = ((((buf[23] << 8) & 0xFFFFFF00) | (buf[24] & 0x000000FF)));
+            imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+            raw_data = ((((buf[25] << 8) & 0xFFFFFF00) | (buf[26] & 0x000000FF)));
+            imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+            raw_data = ((((buf[27] << 8) & 0xFFFFFF00) | (buf[28] & 0x000000FF)));
+            imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
 
-          /*
-          raw_data = ((((buf[29] << 8) & 0xFFFFFF00) | (buf[30] & 0x000000FF)));
-          roll_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          raw_data = ((((buf[31] << 8) & 0xFFFFFF00) | (buf[32] & 0x000000FF)));
-          pitch_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          raw_data = ((((buf[33] << 8) & 0xFFFFFF00) | (buf[34] & 0x000000FF)));
-          heading_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          */
+            pub.publish(imu_msg);
+          }
+          else if (strcmp(imu_type.c_str(), "withGPS") == 0)
+          {
+            counter = ((buf[11] << 8) & 0x0000FF00) | (buf[12] & 0x000000FF);
+            raw_data = ((((buf[15] << 8) & 0xFFFFFF00) | (buf[16] & 0x000000FF)));
+            imu_msg.angular_velocity.x =
+                raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data = ((((buf[17] << 8) & 0xFFFFFF00) | (buf[18] & 0x000000FF)));
+            imu_msg.angular_velocity.y =
+                raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data = ((((buf[19] << 8) & 0xFFFFFF00) | (buf[20] & 0x000000FF)));
+            imu_msg.angular_velocity.z =
+                raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data = ((((buf[21] << 8) & 0xFFFFFF00) | (buf[22] & 0x000000FF)));
+            imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+            raw_data = ((((buf[23] << 8) & 0xFFFFFF00) | (buf[24] & 0x000000FF)));
+            imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+            raw_data = ((((buf[25] << 8) & 0xFFFFFF00) | (buf[26] & 0x000000FF)));
+            imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
 
-          imu_msg.orientation.x = 0.0;
-          imu_msg.orientation.y = 0.0;
-          imu_msg.orientation.z = 0.0;
-          imu_msg.orientation.w = 1.0;
-          pub1.publish(imu_msg);
+            pub.publish(imu_msg);
+          }
+
           ROS_INFO("counter: %d", counter);
 
         }
-      }
-      else if (strcmp(imu_type.c_str(), "withGPS") == 0 && publish_air_pressure == false)
-      {
-        if (buf[5] == 'B' && buf[6] == 'I' && buf[7] == 'N' && buf[8] == ',')
+        else if (buf[5] == 'V' && buf[6] == 'E' && buf[7] == 'R' && buf[8] == ',')
         {
-          imu_msg.header.frame_id = frame_id;
-          imu_msg.header.stamp = ros::Time::now();
-
-          data_size = ((buf[9] << 8) & 0x0000FF00) | (buf[10] & 0x000000FF);
-          counter = ((buf[11] << 8) & 0x0000FF00) | (buf[12] & 0x000000FF);
-          status = ((buf[13] << 8) & 0x0000FF00) | (buf[14] & 0x000000FF);
-          raw_data = ((((buf[15] << 8) & 0xFFFFFF00) | (buf[16] & 0x000000FF)));
-          imu_msg.angular_velocity.x =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[17] << 8) & 0xFFFFFF00) | (buf[18] & 0x000000FF)));
-          imu_msg.angular_velocity.y =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[19] << 8) & 0xFFFFFF00) | (buf[20] & 0x000000FF)));
-          imu_msg.angular_velocity.z =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[21] << 8) & 0xFFFFFF00) | (buf[22] & 0x000000FF)));
-          imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((buf[23] << 8) & 0xFFFFFF00) | (buf[24] & 0x000000FF)));
-          imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((buf[25] << 8) & 0xFFFFFF00) | (buf[26] & 0x000000FF)));
-          imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-
-          /*
-          raw_data = ((((buf[27] << 8) & 0xFFFFFF00) | (buf[28] & 0x000000FF)));
-          roll_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          raw_data = ((((buf[29] << 8) & 0xFFFFFF00) | (buf[30] & 0x000000FF)));
-          pitch_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          raw_data = ((((buf[31] << 8) & 0xFFFFFF00) | (buf[32] & 0x000000FF)));
-          heading_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          */
-
-          imu_msg.orientation.x = 0.0;
-          imu_msg.orientation.y = 0.0;
-          imu_msg.orientation.z = 0.0;
-          imu_msg.orientation.w = 1.0;
-          pub1.publish(imu_msg);
-          ROS_INFO("counter: %d", counter);
-
+          ROS_INFO("%s", buf);
         }
-      }
-      else if (strcmp(imu_type.c_str(), "withGPS") == 0 && publish_air_pressure == true)
-      {
-        if (buf[5] == 'B' && buf[6] == 'I' && buf[7] == 'N' && buf[8] == '2' && buf[9] == ',')
-        {
-          imu_msg.header.frame_id = pressure_msg.header.frame_id = frame_id;
-          imu_msg.header.stamp = pressure_msg.header.stamp = ros::Time::now();
-
-          data_size = ((buf[10] << 8) & 0x0000FF00) | (buf[11] & 0x000000FF);
-          counter = ((buf[12] << 8) & 0x0000FF00) | (buf[13] & 0x000000FF);
-          status = ((buf[14] << 8) & 0x0000FF00) | (buf[15] & 0x000000FF);
-          raw_data = ((((buf[16] << 8) & 0xFFFFFF00) | (buf[17] & 0x000000FF)));
-          imu_msg.angular_velocity.x =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[18] << 8) & 0xFFFFFF00) | (buf[19] & 0x000000FF)));
-          imu_msg.angular_velocity.y =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[20] << 8) & 0xFFFFFF00) | (buf[21] & 0x000000FF)));
-          imu_msg.angular_velocity.z =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((buf[22] << 8) & 0xFFFFFF00) | (buf[23] & 0x000000FF)));
-          imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((buf[24] << 8) & 0xFFFFFF00) | (buf[25] & 0x000000FF)));
-          imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((buf[26] << 8) & 0xFFFFFF00) | (buf[27] & 0x000000FF)));
-          imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-
-          /*
-          raw_data = ((((buf[28] << 8) & 0xFFFFFF00) | (buf[29] & 0x000000FF)));
-          roll_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          raw_data = ((((buf[30] << 8) & 0xFFFFFF00) | (buf[31] & 0x000000FF)));
-          pitch_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          raw_data = ((((buf[32] << 8) & 0xFFFFFF00) | (buf[33] & 0x000000FF)));
-          heading_angle = raw_data * (180 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg] => [rad]
-          */
-
-          raw_data = ((((buf[54] << 8) & 0xFFFFFF00) | (buf[55] & 0x000000FF)));
-          pressure_msg.fluid_pressure = raw_data * (1500 / pow(2, 15));  // LSB & unit [hPa]
-
-          /*
-          raw_data = ((((buf[56] << 8) & 0xFFFFFF00) | (buf[57] & 0x000000FF)));
-          pressure_altitude = raw_data * (5000 / pow(2, 15));  // LSB & unit [m]
-          */
-
-          imu_msg.orientation.x = 0.0;
-          imu_msg.orientation.y = 0.0;
-          imu_msg.orientation.z = 0.0;
-          imu_msg.orientation.w = 1.0;
-          pressure_msg.variance = 0;
-          pub1.publish(imu_msg);
-          pub2.publish(pressure_msg);
-          ROS_INFO("counter: %d", counter);
-
-        }
-      }
-      if (buf[5] == 'V' && buf[6] == 'E' && buf[7] == 'R' && buf[8] == ',')
-      {
-        ROS_INFO("%s", buf);
-      }
     }
-
-    pn.getParam("/tamagawa_imu/frame_id", frame_id);
-    pn.getParam("/tamagawa_imu/type", imu_type);
-    pn.getParam("/tamagawa_imu/rate", rate);
-    pn.getParam("/tamagawa_imu/publish_air_pressure", publish_air_pressure);
-
+    memset(buf, 0x00, sizeof(buf));
     signal(SIGINT, shutdown_cmd);
     ros::spinOnce();
     loop_rate.sleep();
