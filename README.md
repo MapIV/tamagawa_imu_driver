@@ -12,7 +12,15 @@ This package requires can_msgs.
 
 		sudo apt-get install ros-kinetic-can-msgs  
 
-## Usage (Serial)
+## Usage (CAN)
+
+1)Use [socketcan_interface](http://wiki.ros.org/socketcan_interface) etc. to publish the IMU CAN signal with the topic name /can/imu with the data type can_msgs/Frame.msg.  
+
+2)Execute command.  
+
+		roslaunch tamagawa_imu_driver can.launch  
+
+## Usage (Serial) Not recommended!
 1)Connect the serial-USB converter to the IMU.
 
 
@@ -42,11 +50,3 @@ ex)
 		rostopic pub -1 /tamagawa_imu/receive_heading_reset_req std_msgs/Int32 1  
 
 The arguments can be anything.
-
-## Usage (CAN)
-
-1)Use [socketcan_interface](http://wiki.ros.org/socketcan_interface) etc. to publish the IMU CAN signal with the topic name /can/imu with the data type can_msgs/Frame.msg.  
-
-2)Execute command.  
-
-		roslaunch tamagawa_imu_driver can.launch  
