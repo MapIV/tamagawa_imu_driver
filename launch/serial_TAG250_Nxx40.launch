@@ -2,6 +2,6 @@
 
 <launch>
 
-  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" args="/dev/ttyUSB0" "withGPS" "100"/>
+  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" args="/dev/ttyUSB0 withGPS 50" output="screen"/>
 
 </launch>
