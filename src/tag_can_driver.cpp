@@ -27,67 +27,60 @@
  * tag_can_driver.cpp
  * Tamagawa IMU Driver
  * Author MapIV Sekino
- * Ver 1.00 2019/6/1
  */
 
 #include "ros/ros.h"
 #include "can_msgs/Frame.h"
 #include "sensor_msgs/Imu.h"
 
-ros::Publisher pub;
+static unsigned int counter;
+static int16_t raw_data;
 
-uint16_t counter;
-int16_t angular_velocity_x_raw = 0;
-int16_t angular_velocity_y_raw = 0;
-int16_t angular_velocity_z_raw = 0;
-int16_t acceleration_x_raw = 0;
-int16_t acceleration_y_raw = 0;
-int16_t acceleration_z_raw = 0;
+static sensor_msgs::Imu imu_msg;
+static ros::Publisher pub;
 
-sensor_msgs::Imu imu_msg;
-
-void receive_CAN(const can_msgs::Frame::ConstPtr& msg){
+void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
 
   if(msg->id == 0x319)
   {
     imu_msg.header.frame_id = "imu";
     imu_msg.header.stamp = ros::Time::now();
-    
+
     counter = msg->data[1] + (msg->data[0] << 8);
-    angular_velocity_x_raw = msg->data[3] + (msg->data[2] << 8);
+    raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.angular_velocity.x =
-        angular_velocity_x_raw * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    angular_velocity_y_raw = msg->data[5] + (msg->data[4] << 8);
+        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+    raw_data = msg->data[5] + (msg->data[4] << 8);
     imu_msg.angular_velocity.y =
-        angular_velocity_y_raw * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    angular_velocity_z_raw = msg->data[7] + (msg->data[6] << 8);
+        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+    raw_data = msg->data[7] + (msg->data[6] << 8);
     imu_msg.angular_velocity.z =
-        angular_velocity_z_raw * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    ROS_INFO("IMU Counter = %d",counter);
+        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
   }
   if(msg->id == 0x31A)
   {
-    acceleration_x_raw = msg->data[3] + (msg->data[2] << 8);
-    imu_msg.linear_acceleration.x = acceleration_x_raw * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-    acceleration_y_raw = msg->data[5] + (msg->data[4] << 8);
-    imu_msg.linear_acceleration.y = acceleration_y_raw * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-    acceleration_z_raw = msg->data[7] + (msg->data[6] << 8);
-    imu_msg.linear_acceleration.z = acceleration_z_raw * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+    raw_data = msg->data[3] + (msg->data[2] << 8);
+    imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+    raw_data = msg->data[5] + (msg->data[4] << 8);
+    imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+    raw_data = msg->data[7] + (msg->data[6] << 8);
+    imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
 
     imu_msg.orientation.x = 0.0;
     imu_msg.orientation.y = 0.0;
     imu_msg.orientation.z = 0.0;
     imu_msg.orientation.w = 1.0;
     pub.publish(imu_msg);
+    //std::cout << counter << std::endl;
   }
 
 }
 
 int main(int argc, char **argv){
 
-  ros::init(argc, argv, "tag_serial_driver");
+  ros::init(argc, argv, "tag_can_driver");
   ros::NodeHandle n;
-  ros::Subscriber sub = n.subscribe("/can/imu", 100, receive_CAN);
+  ros::Subscriber sub = n.subscribe("/imu/can_tx", 100, receive_can_callback);
   pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 100);
   ros::spin();
 
