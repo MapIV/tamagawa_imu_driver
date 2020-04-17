@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(tamagawa_imu_driver)
 
+SET(CMAKE_CXX_FLAGS "-std=c++11 -O2 -g -Wall ${CMAKE_CXX_FLAGS}")
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
