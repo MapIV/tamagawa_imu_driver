@@ -24,6 +24,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /*
+ * TAG350 ver
  * tag_can_driver.cpp
  * Tamagawa IMU Driver
  * Author MapIV Sekino
@@ -35,9 +36,11 @@
 
 static unsigned int counter;
 static int16_t raw_data;
+static int32_t raw_data2;
 
 static sensor_msgs::Imu imu_msg;
 static ros::Publisher pub;
+
 
 void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
 
@@ -46,18 +49,18 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
     imu_msg.header.frame_id = "imu";
     imu_msg.header.stamp = ros::Time::now();
 
-    counter = msg->data[1] + (msg->data[0] << 8);
-    raw_data = msg->data[3] + (msg->data[2] << 8);
+    raw_data = msg->data[1] + (msg->data[0] << 8);
     imu_msg.angular_velocity.x =
         raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    raw_data = msg->data[5] + (msg->data[4] << 8);
+    raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.angular_velocity.y =
         raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    raw_data = msg->data[7] + (msg->data[6] << 8);
+    raw_data2 = (msg->data[7] + (msg->data[6] << 8)) + ((msg->data[5] << 16) + (msg->data[4] << 24));
     imu_msg.angular_velocity.z =
-        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data2 * (200 / pow(2, 31)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+
   }
-  if(msg->id == 0x31A)
+  else if(msg->id == 0x31A)
   {
     raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
@@ -75,6 +78,7 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
   }
 
 }
+
 
 int main(int argc, char **argv){
 
