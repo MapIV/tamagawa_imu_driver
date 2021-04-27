@@ -2,6 +2,6 @@
 
 <launch>
 
-  <node pkg="tamagawa_imu_driver" name="tag_can_driver" type="tag_can_driver" />
+  <node pkg="tamagawa_imu_driver" name="tag_can_driver" exec="tag_can_driver" />
 
 </launch>

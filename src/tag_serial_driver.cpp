@@ -29,9 +29,9 @@
  * Author MapIV Sekino
  */
 
-#include "ros/ros.h"
-#include "sensor_msgs/Imu.h"
-#include "std_msgs/Int32.h"
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/imu.hpp"
+#include "std_msgs/msg/int32.hpp"
 #include <string>
 #include <unistd.h>
 #include <fcntl.h>
@@ -50,9 +50,13 @@ static std::string rate = "50";
 
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "tag_serial_driver", ros::init_options::NoSigintHandler);
-  ros::NodeHandle n;
-  ros::Publisher pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
+  auto init_options = rclcpp::InitOptions();
+  init_options.shutdown_on_sigint = false;
+  rclcpp::init(argc, argv, init_options);
+  std::string node_name = "tag_serial_driver";
+  auto node = rclcpp::Node::make_shared(node_name);
+  auto pub = node->create_publisher<sensor_msgs::msg::Imu>("/imu/data_raw", 100);
+
   io_service io;
 
   // Use configured device
@@ -88,7 +92,7 @@ int main(int argc, char** argv)
   serial_port.write_some(buffer(wbuf));
   std::cout << "request: " << wbuf << std::endl;
 
-  sensor_msgs::Imu imu_msg;
+  sensor_msgs::msg::Imu imu_msg;
   imu_msg.header.frame_id = "imu";
   imu_msg.orientation.x = 0.0;
   imu_msg.orientation.y = 0.0;
@@ -98,7 +102,7 @@ int main(int argc, char** argv)
   unsigned int counter;
   int raw_data;
 
-  while (ros::ok())
+  while (rclcpp::ok())
   {
     //ros::spinOnce();
     boost::asio::streambuf response;
@@ -107,7 +111,7 @@ int main(int argc, char** argv)
 
     if (rbuf[5] == 'R' && rbuf[6] == 'A' && rbuf[7] == 'W' && rbuf[8] == ',')
     {
-      imu_msg.header.stamp = ros::Time::now();
+      imu_msg.header.stamp = rclcpp::Clock(RCL_ROS_TIME).now();
 
       if (strcmp(imu_type.c_str(), "noGPS") == 0)
       {
@@ -128,7 +132,7 @@ int main(int argc, char** argv)
         imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
         raw_data = ((((rbuf[27] << 8) & 0xFFFFFF00) | (rbuf[28] & 0x000000FF)));
         imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-        pub.publish(imu_msg);
+        pub->publish(imu_msg);
       }
       else if (strcmp(imu_type.c_str(), "withGPS") == 0)
       {
@@ -148,7 +152,7 @@ int main(int argc, char** argv)
         imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
         raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
         imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-        pub.publish(imu_msg);
+        pub->publish(imu_msg);
       }
       //std::cout << counter << std::endl;
     }

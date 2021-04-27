@@ -8,17 +8,17 @@
 
   <license>BSD</license>
 
-  <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>roscpp</build_depend>
-  <build_depend>sensor_msgs</build_depend>
-  <build_depend>can_msgs</build_depend>
-  <build_export_depend>roscpp</build_export_depend>
-  <build_export_depend>sensor_msgs</build_export_depend>
-  <build_export_depend>can_msgs</build_export_depend>
-  <exec_depend>roscpp</exec_depend>
-  <exec_depend>sensor_msgs</exec_depend>
-  <exec_depend>can_msgs</exec_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <export>
-  </export>
+	<depend>ament_lint_auto</depend>
+	<depend>ament_lint_common</depend>
+	<depend>rclcpp</depend>
+	<depend>rclcpp_components</depend>
+	<depend>can_msgs</depend>
+	<depend>sensor_msgs</depend>
+
+	<export>
+	  <build_type>ament_cmake</build_type>
+	</export>
+
 </package>

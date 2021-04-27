@@ -29,22 +29,22 @@
  * Author MapIV Sekino
  */
 
-#include "ros/ros.h"
-#include "can_msgs/Frame.h"
-#include "sensor_msgs/Imu.h"
+#include "rclcpp/rclcpp.hpp"
+#include "can_msgs/msg/frame.hpp"
+#include "sensor_msgs/msg/imu.hpp"
 
 static unsigned int counter;
 static int16_t raw_data;
 
-static sensor_msgs::Imu imu_msg;
-static ros::Publisher pub;
+static sensor_msgs::msg::Imu imu_msg;
+rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub;
 
-void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
+void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
 
   if(msg->id == 0x319)
   {
     imu_msg.header.frame_id = "imu";
-    imu_msg.header.stamp = ros::Time::now();
+    imu_msg.header.stamp = rclcpp::Clock(RCL_ROS_TIME).now();
 
     counter = msg->data[1] + (msg->data[0] << 8);
     raw_data = msg->data[3] + (msg->data[2] << 8);
@@ -70,19 +70,19 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
     imu_msg.orientation.y = 0.0;
     imu_msg.orientation.z = 0.0;
     imu_msg.orientation.w = 1.0;
-    pub.publish(imu_msg);
+    pub->publish(imu_msg);
     //std::cout << counter << std::endl;
   }
 
 }
 
 int main(int argc, char **argv){
+  rclcpp::init(argc, argv);
 
-  ros::init(argc, argv, "tag_can_driver");
-  ros::NodeHandle n;
-  ros::Subscriber sub = n.subscribe("/imu/can_tx", 100, receive_can_callback);
-  pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 100);
-  ros::spin();
+  auto node = rclcpp::Node::make_shared("tag_can_driver");
+  rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("/can/imu", 100, receive_CAN);
+  pub = node->create_publisher<sensor_msgs::msg::Imu>("/imu/data_raw", 100);
+  rclcpp::spin(node);
 
   return 0;
 }

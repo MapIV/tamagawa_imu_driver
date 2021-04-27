@@ -1,23 +1,32 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.5)
 project(tamagawa_imu_driver)
 
-SET(CMAKE_CXX_FLAGS "-std=c++11 -O2 -g -Wall ${CMAKE_CXX_FLAGS}")
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
 
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  sensor_msgs
-  can_msgs
+ament_auto_add_executable(tag_serial_driver src/tag_serial_driver.cpp)
+
+ament_auto_add_executable(tag_can_driver src/tag_can_driver.cpp)
+
+install(TARGETS
+tag_serial_driver
+  DESTINATION lib/tag_serial_driver
 )
 
-catkin_package(
+install(TARGETS
+  tag_can_driver
+  DESTINATION lib/tag_can_driver
 )
 
-include_directories(
-  ${catkin_INCLUDE_DIRS}
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
-add_executable(tag_serial_driver src/tag_serial_driver.cpp)
-target_link_libraries(tag_serial_driver ${catkin_LIBRARIES})
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+endif()
 
-add_executable(tag_can_driver src/tag_can_driver.cpp)
-target_link_libraries(tag_can_driver ${catkin_LIBRARIES})
+ament_auto_package()
+
