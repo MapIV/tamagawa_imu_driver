@@ -84,8 +84,8 @@ int main(int argc, char **argv){
 
   ros::init(argc, argv, "tag_can_driver");
   ros::NodeHandle n;
-  ros::Subscriber sub = n.subscribe("/imu/can_tx", 100, receive_can_callback);
-  pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 100);
+  ros::Subscriber sub = n.subscribe("imu/can_tx", 100, receive_can_callback);
+  pub = n.advertise<sensor_msgs::Imu>("imu/data_raw", 100);
   ros::spin();
 
   return 0;
