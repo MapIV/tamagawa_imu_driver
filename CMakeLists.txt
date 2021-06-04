@@ -21,3 +21,16 @@ target_link_libraries(tag_serial_driver ${catkin_LIBRARIES})
 
 add_executable(tag_can_driver src/tag_can_driver.cpp)
 target_link_libraries(tag_can_driver ${catkin_LIBRARIES})
+
+
+install(TARGETS
+  tag_can_driver
+  tag_serial_driver
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY
+    launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)
