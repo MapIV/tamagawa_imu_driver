@@ -44,7 +44,7 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
   if(msg->id == 0x319)
   {
     imu_msg.header.frame_id = "imu";
-    imu_msg.header.stamp = ros::Time::now();
+    imu_msg.header.stamp = msg->header.stamp;
 
     counter = msg->data[1] + (msg->data[0] << 8);
     raw_data = msg->data[3] + (msg->data[2] << 8);
