@@ -10,6 +10,10 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 catkin_package(
+  CATKIN_DEPENDS
+  roscpp
+  sensor_msgs
+  can_msgs
 )
 
 include_directories(
@@ -21,3 +25,16 @@ target_link_libraries(tag_serial_driver ${catkin_LIBRARIES})
 
 add_executable(tag_can_driver src/tag_can_driver.cpp)
 target_link_libraries(tag_can_driver ${catkin_LIBRARIES})
+
+install(TARGETS
+  tag_serial_driver
+  tag_can_driver
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY
+    launch
+    config
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+)

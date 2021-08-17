@@ -2,6 +2,8 @@
 
 <launch>
 
-  <node pkg="tamagawa_imu_driver" name="tag_can_driver" type="tag_can_driver" />
+  <node pkg="tamagawa_imu_driver" name="tag_can_driver" type="tag_can_driver">
+    <rosparam command="load" file="$(find tamagawa_imu_driver)/config/config.yaml"/>
+  </node>
 
 </launch>
