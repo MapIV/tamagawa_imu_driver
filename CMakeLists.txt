@@ -7,6 +7,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   can_msgs
+  diagnostic_msgs
 )
 
 catkin_package(
