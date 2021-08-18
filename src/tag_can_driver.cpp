@@ -29,14 +29,16 @@
  * Author MapIV Sekino
  */
 
+#include <iostream>
+
 #include "ros/ros.h"
 #include "can_msgs/Frame.h"
 #include "sensor_msgs/Imu.h"
-#include "diagnostic_updater/diagnostic_updater.h"
+#include <diagnostic_updater/diagnostic_updater.h>
 
 static unsigned int counter;
 static int16_t raw_data;
-static int32_t raw_data_fog;
+static int32_t raw_data2;
 static uint16_t imu_status;
 static bool use_fog;
 
@@ -52,29 +54,34 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
     imu_msg.header.frame_id = "imu";
     imu_msg.header.stamp = msg->header.stamp;
 
-    counter = msg->data[1] + (msg->data[0] << 8);
-    raw_data = msg->data[3] + (msg->data[2] << 8);
-    imu_msg.angular_velocity.x =
-        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    raw_data = msg->data[5] + (msg->data[4] << 8);
-    imu_msg.angular_velocity.y =
-        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    
     if (use_fog) 
     {
-      raw_data_fog = (msg->data[7] + (msg->data[6] << 8)) + ((msg->data[5] << 16) + (msg->data[4] << 24));
+      raw_data = msg->data[1] + (msg->data[0] << 8);
+      imu_msg.angular_velocity.x =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data = msg->data[3] + (msg->data[2] << 8);
+      imu_msg.angular_velocity.y =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data2 = (msg->data[7] + (msg->data[6] << 8)) + ((msg->data[5] << 16) + (msg->data[4] << 24));
       imu_msg.angular_velocity.z =
-        raw_data_fog * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+          raw_data2 * (200 / pow(2, 31)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
     }
     else 
     {
+      counter = msg->data[1] + (msg->data[0] << 8);
+      raw_data = msg->data[3] + (msg->data[2] << 8);
+      imu_msg.angular_velocity.x =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data = msg->data[5] + (msg->data[4] << 8);
+      imu_msg.angular_velocity.y =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
       raw_data = msg->data[7] + (msg->data[6] << 8);
       imu_msg.angular_velocity.z =
         raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
     }
     
   }
-  if(msg->id == 0x31A)
+  else if(msg->id == 0x31A)
   {
     raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
@@ -117,9 +124,8 @@ int main(int argc, char **argv){
 
   ros::init(argc, argv, "tag_can_driver");
   ros::NodeHandle n;
-  ros::NodeHandle pnh("~");
 
-  pnh.getParam("tag_can_driver/use_fog", use_fog);
+  n.getParam("tag_can_driver/use_fog", use_fog);
 
   diagnostic_updater::Updater updater;
   p_updater = &updater;

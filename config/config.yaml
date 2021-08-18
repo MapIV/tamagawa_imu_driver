@@ -1,1 +1,2 @@
-use_fog: true
+tag_can_driver:
+  use_fog: true

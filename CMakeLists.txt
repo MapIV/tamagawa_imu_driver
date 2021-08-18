@@ -8,6 +8,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   can_msgs
   diagnostic_msgs
+  diagnostic_updater
 )
 
 catkin_package(
