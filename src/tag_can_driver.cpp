@@ -83,6 +83,7 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
   }
   else if(msg->id == 0x31A)
   {
+    imu_status = msg->data[1] + (msg->data[0] << 8);
     raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
     raw_data = msg->data[5] + (msg->data[4] << 8);
@@ -102,38 +103,52 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
 
 }
 
-void diagnostic_tag_can(diagnostic_updater::DiagnosticStatusWrapper& stat)
+void check_timeout(diagnostic_updater::DiagnosticStatusWrapper& stat)
 {
-  ros::Time diagnostic_time = ros::Time::now();
+  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
 
-  if(diagnostic_time.toSec() - imu_msg.header.stamp.toSec() >= 5.0)
+  ros::Time now = ros::Time::now();
+
+  if(now.toSec() - imu_msg.header.stamp.toSec() >= 5.0)
   {
-    stat.summaryf(diagnostic_msgs::DiagnosticStatus::STALE, "No data coming in for more than 1s");
+    level = diagnostic_msgs::DiagnosticStatus::WARN;
+    msg = "TIMEOUT";
   }
-  else if(imu_status & 0x8000)
+
+  stat.summary(level, msg);
+}
+
+void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
+
+  if (imu_status >> 15)
   {
-    stat.summaryf(diagnostic_msgs::DiagnosticStatus::ERROR, "Error detected by BIT");
+    level = diagnostic_msgs::DiagnosticStatus::ERROR;
+    msg = "BUILT-IN TEST ERROR";
   }
-  else
-  {
-    stat.summaryf(diagnostic_msgs::DiagnosticStatus::OK, "OK");
-  }
+
+  stat.summary(level, msg);
 }
 
 int main(int argc, char **argv){
 
   ros::init(argc, argv, "tag_can_driver");
-  ros::NodeHandle n;
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
 
-  n.getParam("tag_can_driver/use_fog", use_fog);
+  pnh.param<bool>("use_fog", use_fog, false);
 
   diagnostic_updater::Updater updater;
   p_updater = &updater;
   updater.setHardwareID("tamagawa_imu");
-  updater.add("tamagawa_imu", diagnostic_tag_can);
+  updater.add("Timeout status", check_timeout);
+  updater.add("BIT error status", check_bit_error);
   
-  ros::Subscriber sub = n.subscribe("imu/can_tx", 100, receive_can_callback);
-  pub = n.advertise<sensor_msgs::Imu>("imu/data_raw", 100);
+  ros::Subscriber sub = nh.subscribe("imu/can_tx", 100, receive_can_callback);
+  pub = nh.advertise<sensor_msgs::Imu>("imu/data_raw", 100);
   ros::spin();
 
   return 0;
