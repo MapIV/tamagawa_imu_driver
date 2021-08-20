@@ -13,18 +13,13 @@ jobs:
           name: Install catkin
           command: |
             apt-get update -qq && apt-get install -y python-catkin-tools
-            source /opt/ros/kinetic/setup.bash
-            rosdep install --from-paths src --ignore-src -y --rosdistro kinetic
-
-      - run:
-          name: Install ros-kinetic-can-msgs
-          command: |
-            apt-get install ros-kinetic-can-msgs
+            source /opt/ros/$ROS_DISTRO/setup.bash
+            rosdep install -r -y --from-paths . --ignore-src --rosdistro $ROS_DISTRO
 
       - run:
           name: Build
           command: |
-            source /opt/ros/kinetic/setup.bash
+            source /opt/ros/$ROS_DISTRO/setup.bash
             mkdir -p /tmp/ws/src
             ln -s `pwd` /tmp/ws/src/package
             cd /tmp/ws/src
