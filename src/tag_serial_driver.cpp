@@ -33,6 +33,7 @@
 #include "sensor_msgs/Imu.h"
 #include "std_msgs/Int32.h"
 #include <string>
+#include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -74,7 +75,8 @@ void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat)
   size_t level = diagnostic_msgs::DiagnosticStatus::OK;
   std::string msg = "OK";
 
-  if (imu_status >> 15)
+  // if (imu_status >> 15)
+  if ((imu_status & 0x8000))
   {
     level = diagnostic_msgs::DiagnosticStatus::ERROR;
     msg = "BUILT-IN TEST ERROR";
@@ -87,6 +89,7 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "tag_serial_driver", ros::init_options::NoSigintHandler);
   ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
   ros::Publisher pub = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
   io_service io;
 
@@ -95,31 +98,12 @@ int main(int argc, char** argv)
   updater.add("Timeout status", check_timeout);
   updater.add("BIT error status", check_bit_error);
 
-  // Use configured device
-  if (argc == 5)
-  {
-    device = argv[1];
-    imu_type = argv[2];
-    rate = argv[3];
-    use_fog = argv[4];
-  }
-  else if (argc == 4)
-  {
-    device = argv[1];
-    imu_type = argv[2];
-    rate = argv[3];
-  }
-  else if (argc == 3)
-  {
-    device = argv[1];
-    imu_type = argv[2];
-  }
-  else if (argc == 2)
-  {
-    device = argv[1];
-  }
+  pnh.param<std::string>("device", device, "/dev/ttyUSB0");
+  pnh.param<std::string>("imu_type", imu_type, "noGPS");
+  pnh.param<std::string>("rate", rate, "50");
+  pnh.param<bool>("use_fog", use_fog, false);
 
-  std::cout << "device= " << device << " imu_type= " << imu_type << " rate= " << rate << " use_fog= " << use_fog << std::endl;
+  std::cout << "device= " << device << " imu_type= " << imu_type << " rate= " << rate << " use_fog= " << std::boolalpha << use_fog << std::endl;
 
   serial_port serial_port(io, device);
   serial_port.set_option(serial_port_base::baud_rate(115200));
@@ -129,7 +113,7 @@ int main(int argc, char** argv)
   serial_port.set_option(serial_port_base::stop_bits(serial_port_base::stop_bits::one));
 
   // Data output request to IMU
-  std::string wbuf = "$TSC,RAW,";
+  std::string wbuf = "$TSC,BIN,";
   wbuf += rate;
   wbuf += "\x0d\x0a";
   serial_port.write_some(buffer(wbuf));
@@ -141,7 +125,7 @@ int main(int argc, char** argv)
   imu_msg.orientation.z = 0.0;
   imu_msg.orientation.w = 1.0;
 
-  unsigned int counter;
+  size_t counter;
   int16_t raw_data;
   int32_t raw_data_2;
 
@@ -152,84 +136,55 @@ int main(int argc, char** argv)
     boost::asio::read_until(serial_port, response, "\n");
     std::string rbuf(boost::asio::buffers_begin(response.data()), boost::asio::buffers_end(response.data()));
 
-    if (rbuf[5] == 'R' && rbuf[6] == 'A' && rbuf[7] == 'W' && rbuf[8] == ',')
+    use_fog = false;
+
+    if (rbuf[5] == 'B' && rbuf[6] == 'I' && rbuf[7] == 'N' && rbuf[8] == ',')
     {
       imu_msg.header.stamp = ros::Time::now();
       if (use_fog)
       {
-        if (strcmp(imu_type.c_str(), "noGPS") == 0)
-        {
-          ROS_ERROR("FOG + noGPS is not implemented");
-          return 1;
-        }
-        else if (strcmp(imu_type.c_str(), "withGPS") == 0) {
-          counter = ((rbuf[11] << 24) & 0xFF000000) | ((rbuf[12] << 16) & 0x00FF0000) | ((rbuf[13] << 8) & 0x0000FF00) |
-                    (rbuf[14] & 0x000000FF);
-          imu_status = ((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF);
-          raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
-          imu_msg.angular_velocity.x =
+        ROS_INFO_ONCE("BIN-w/FOG");
+        counter = ((rbuf[11] << 24) & 0xFF000000) | ((rbuf[12] << 16) & 0x00FF0000);
+        imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
+        raw_data = ((((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF)));
+        imu_msg.angular_velocity.x =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
+        imu_msg.angular_velocity.y =
             raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[19] << 8) & 0xFFFFFF00) | (rbuf[20] & 0x000000FF)));
-          imu_msg.angular_velocity.y =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data_2 = ((rbuf[21] << 24) & 0xFF000000) | ((rbuf[22] << 16) & 0x00FF0000) | ((rbuf[23] << 8) & 0x0000FF00) |
-                    (rbuf[24] & 0x000000FF);
-          imu_msg.angular_velocity.z =
-              raw_data_2 * (200 / pow(2, 31)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
-          imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((rbuf[27] << 8) & 0xFFFFFF00) | (rbuf[28] & 0x000000FF)));
-          imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((rbuf[29] << 8) & 0xFFFFFF00) | (rbuf[30] & 0x000000FF)));
-          imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          pub.publish(imu_msg);
-        }
+        raw_data_2 = ((rbuf[19] << 24) & 0xFF000000) | ((rbuf[20] << 16) & 0x00FF0000) | ((rbuf[21] << 8) & 0x0000FF00) |
+                  (rbuf[22] & 0x000000FF);
+        imu_msg.angular_velocity.z =
+            raw_data_2 * (200 / pow(2, 31)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data = ((((rbuf[23] << 8) & 0xFFFFFF00) | (rbuf[24] & 0x000000FF)));
+        imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+        raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
+        imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+        raw_data = ((((rbuf[27] << 8) & 0xFFFFFF00) | (rbuf[28] & 0x000000FF)));
+        imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+        pub.publish(imu_msg);
       }
       else
       {
-        if (strcmp(imu_type.c_str(), "noGPS") == 0)
-        {
-          counter = ((rbuf[11] << 24) & 0xFF000000) | ((rbuf[12] << 16) & 0x00FF0000) | ((rbuf[13] << 8) & 0x0000FF00) |
-                    (rbuf[14] & 0x000000FF);
-          imu_status = ((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF);
-          raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
-          imu_msg.angular_velocity.x =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[19] << 8) & 0xFFFFFF00) | (rbuf[20] & 0x000000FF)));
-          imu_msg.angular_velocity.y =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[21] << 8) & 0xFFFFFF00) | (rbuf[22] & 0x000000FF)));
-          imu_msg.angular_velocity.z =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[23] << 8) & 0xFFFFFF00) | (rbuf[24] & 0x000000FF)));
-          imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
-          imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((rbuf[27] << 8) & 0xFFFFFF00) | (rbuf[28] & 0x000000FF)));
-          imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          pub.publish(imu_msg);
-        }
-        else if (strcmp(imu_type.c_str(), "withGPS") == 0)
-        {
-          counter = ((rbuf[11] << 8) & 0x0000FF00) | (rbuf[12] & 0x000000FF);
-          imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
-          raw_data = ((((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF)));
-          imu_msg.angular_velocity.x =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
-          imu_msg.angular_velocity.y =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[19] << 8) & 0xFFFFFF00) | (rbuf[20] & 0x000000FF)));
-          imu_msg.angular_velocity.z =
-              raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-          raw_data = ((((rbuf[21] << 8) & 0xFFFFFF00) | (rbuf[22] & 0x000000FF)));
-          imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((rbuf[23] << 8) & 0xFFFFFF00) | (rbuf[24] & 0x000000FF)));
-          imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
-          imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-          pub.publish(imu_msg);
-        }
+        ROS_INFO_ONCE("BIN-w/oFOG");
+        counter = ((rbuf[11] << 8) & 0x0000FF00) | (rbuf[12] & 0x000000FF);
+        imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
+        raw_data = ((((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF)));
+        imu_msg.angular_velocity.x =
+            raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
+        imu_msg.angular_velocity.y =
+            raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data = ((((rbuf[19] << 8) & 0xFFFFFF00) | (rbuf[20] & 0x000000FF)));
+        imu_msg.angular_velocity.z =
+            raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data = ((((rbuf[21] << 8) & 0xFFFFFF00) | (rbuf[22] & 0x000000FF)));
+        imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+        raw_data = ((((rbuf[23] << 8) & 0xFFFFFF00) | (rbuf[24] & 0x000000FF)));
+        imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+        raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
+        imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+        pub.publish(imu_msg);
         //std::cout << counter << std::endl;
       }
       updater.update();
