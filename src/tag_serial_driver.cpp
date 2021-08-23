@@ -50,39 +50,53 @@ static std::string device = "/dev/ttyUSB0";
 static std::string imu_type = "noGPS";
 static std::string rate = "50";
 static bool use_fog = false;
+static bool ready = false;
 static sensor_msgs::Imu imu_msg;
 static int16_t imu_status;
 
+static diagnostic_updater::Updater* p_updater;
 
-void check_timeout(diagnostic_updater::DiagnosticStatusWrapper& stat)
+
+uint8_t check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
 {
-  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
-  std::string msg = "OK";
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
 
-  ros::Time now = ros::Time::now();
-
-  if(now.toSec() - imu_msg.header.stamp.toSec() >= 5.0)
+  if (imu_status >> 15)
   {
-    level = diagnostic_msgs::DiagnosticStatus::WARN;
-    msg = "TIMEOUT";
+    level = diagnostic_msgs::DiagnosticStatus::ERROR;
+    stat.add("Built-In Error", "ERROR");
+  }
+  else
+  {
+    stat.add("Built-In Error", "OK");
   }
 
+  return level;
+}
+
+void check_sensor_status(diagnostic_updater::DiagnosticStatusWrapper& stat)
+{
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
+  uint8_t current_level;
+
+  current_level = check_bit_error(stat);
+  level = (current_level > 0) ? current_level: level;
+
+  if (level)
+  {
+    msg = "Problem Found. Check Details.";
+  }
   stat.summary(level, msg);
 }
 
-void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+void diagnostic_timer_callback(const ros::TimerEvent& event)
 {
-  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
-  std::string msg = "OK";
-
-  // if (imu_status >> 15)
-  if ((imu_status & 0x8000))
+  if(ready)
   {
-    level = diagnostic_msgs::DiagnosticStatus::ERROR;
-    msg = "BUILT-IN TEST ERROR";
+    p_updater->force_update();
+    ready = false;
   }
-
-  stat.summary(level, msg);
 }
 
 int main(int argc, char** argv)
@@ -93,10 +107,12 @@ int main(int argc, char** argv)
   ros::Publisher pub = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
   io_service io;
 
+  ros::Timer diagnostics_timer = nh.createTimer(ros::Duration(1.0), diagnostic_timer_callback);
+
   diagnostic_updater::Updater updater;
+  p_updater = &updater;
   updater.setHardwareID("tamagawa_imu");
-  updater.add("Timeout status", check_timeout);
-  updater.add("BIT error status", check_bit_error);
+  updater.add("Status", check_sensor_status);
 
   pnh.param<std::string>("device", device, "/dev/ttyUSB0");
   pnh.param<std::string>("imu_type", imu_type, "noGPS");
@@ -135,8 +151,6 @@ int main(int argc, char** argv)
     boost::asio::streambuf response;
     boost::asio::read_until(serial_port, response, "\n");
     std::string rbuf(boost::asio::buffers_begin(response.data()), boost::asio::buffers_end(response.data()));
-
-    use_fog = false;
 
     if (rbuf[5] == 'B' && rbuf[6] == 'I' && rbuf[7] == 'N' && rbuf[8] == ',')
     {
@@ -187,7 +201,7 @@ int main(int argc, char** argv)
         pub.publish(imu_msg);
         //std::cout << counter << std::endl;
       }
-      updater.update();
+      ready = true;
     }
   }
   return 0;

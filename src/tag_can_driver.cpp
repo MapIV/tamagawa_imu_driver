@@ -41,6 +41,7 @@ static int16_t raw_data;
 static int32_t raw_data2;
 static uint16_t imu_status;
 static bool use_fog;
+static bool ready = false;
 
 static diagnostic_updater::Updater* p_updater;
 
@@ -96,41 +97,52 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
     imu_msg.orientation.z = 0.0;
     imu_msg.orientation.w = 1.0;
     pub.publish(imu_msg);
+
+    ready = true;
     //std::cout << counter << std::endl;
   }
-
-  p_updater->update();
-
 }
 
-void check_timeout(diagnostic_updater::DiagnosticStatusWrapper& stat)
+uint8_t check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
 {
-  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
-  std::string msg = "OK";
-
-  ros::Time now = ros::Time::now();
-
-  if(now.toSec() - imu_msg.header.stamp.toSec() >= 5.0)
-  {
-    level = diagnostic_msgs::DiagnosticStatus::WARN;
-    msg = "TIMEOUT";
-  }
-
-  stat.summary(level, msg);
-}
-
-void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
-{
-  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
-  std::string msg = "OK";
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
 
   if (imu_status >> 15)
   {
     level = diagnostic_msgs::DiagnosticStatus::ERROR;
-    msg = "BUILT-IN TEST ERROR";
+    stat.add("Built-In Error", "ERROR");
+  }
+  else
+  {
+    stat.add("Built-In Error", "OK");
   }
 
+  return level;
+}
+
+void check_sensor_status(diagnostic_updater::DiagnosticStatusWrapper& stat)
+{
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
+  uint8_t current_level;
+
+  current_level = check_bit_error(stat);
+  level = (current_level > 0) ? current_level: level;
+
+  if (level)
+  {
+    msg = "Problem Found. Check Details.";
+  }
   stat.summary(level, msg);
+}
+
+void diagnostic_timer_callback(const ros::TimerEvent& event)
+{
+  if(ready)
+  {
+    p_updater->force_update();
+    ready = false;
+  }
 }
 
 int main(int argc, char **argv){
@@ -139,13 +151,14 @@ int main(int argc, char **argv){
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
 
+  ros::Timer diagnostics_timer = nh.createTimer(ros::Duration(1.0), diagnostic_timer_callback);
+
   pnh.param<bool>("use_fog", use_fog, false);
 
   diagnostic_updater::Updater updater;
   p_updater = &updater;
   updater.setHardwareID("tamagawa_imu");
-  updater.add("Timeout status", check_timeout);
-  updater.add("BIT error status", check_bit_error);
+  updater.add("Status", check_sensor_status);
   
   ros::Subscriber sub = nh.subscribe("imu/can_tx", 100, receive_can_callback);
   pub = nh.advertise<sensor_msgs::Imu>("imu/data_raw", 100);
