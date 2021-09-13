@@ -33,6 +33,7 @@
 #include "sensor_msgs/Imu.h"
 #include "std_msgs/Int32.h"
 #include <string>
+#include <iostream>
 #include <unistd.h>
 #include <fcntl.h>
 #include <termios.h>
@@ -41,38 +42,84 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <boost/asio.hpp>
+#include <diagnostic_updater/diagnostic_updater.h>
 
 using namespace boost::asio;
 
 static std::string device = "/dev/ttyUSB0";
 static std::string imu_type = "noGPS";
 static std::string rate = "50";
+static bool use_fog = false;
+static bool ready = false;
+static sensor_msgs::Imu imu_msg;
+static int16_t imu_status;
+
+static diagnostic_updater::Updater* p_updater;
+
+
+uint8_t check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+
+  if (imu_status >> 15)
+  {
+    level = diagnostic_msgs::DiagnosticStatus::ERROR;
+    stat.add("Built-In Error", "ERROR");
+  }
+  else
+  {
+    stat.add("Built-In Error", "OK");
+  }
+
+  return level;
+}
+
+void check_sensor_status(diagnostic_updater::DiagnosticStatusWrapper& stat)
+{
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
+  uint8_t current_level;
+
+  current_level = check_bit_error(stat);
+  level = (current_level > 0) ? current_level: level;
+
+  if (level)
+  {
+    msg = "Problem Found. Check Details.";
+  }
+  stat.summary(level, msg);
+}
+
+void diagnostic_timer_callback(const ros::TimerEvent& event)
+{
+  if(ready)
+  {
+    p_updater->force_update();
+    ready = false;
+  }
+}
 
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "tag_serial_driver", ros::init_options::NoSigintHandler);
-  ros::NodeHandle n;
-  ros::Publisher pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
+  ros::Publisher pub = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
   io_service io;
 
-  // Use configured device
-  if (argc == 4)
-  {
-    device = argv[1];
-    imu_type = argv[2];
-    rate = argv[3];
-  }
-  else if (argc == 3)
-  {
-    device = argv[1];
-    imu_type = argv[2];
-  }
-  else if (argc == 2)
-  {
-    device = argv[1];
-  }
+  ros::Timer diagnostics_timer = nh.createTimer(ros::Duration(1.0), diagnostic_timer_callback);
 
-  std::cout << "device= " << device << " imu_type= " << imu_type << " rate= " << rate << std::endl;
+  diagnostic_updater::Updater updater;
+  p_updater = &updater;
+  updater.setHardwareID("tamagawa_imu");
+  updater.add("Status", check_sensor_status);
+
+  pnh.param<std::string>("device", device, "/dev/ttyUSB0");
+  pnh.param<std::string>("imu_type", imu_type, "noGPS");
+  pnh.param<std::string>("rate", rate, "50");
+  pnh.param<bool>("use_fog", use_fog, false);
+
+  std::cout << "device= " << device << " imu_type= " << imu_type << " rate= " << rate << " use_fog= " << std::boolalpha << use_fog << std::endl;
 
   serial_port serial_port(io, device);
   serial_port.set_option(serial_port_base::baud_rate(115200));
@@ -82,21 +129,21 @@ int main(int argc, char** argv)
   serial_port.set_option(serial_port_base::stop_bits(serial_port_base::stop_bits::one));
 
   // Data output request to IMU
-  std::string wbuf = "$TSC,RAW,";
+  std::string wbuf = "$TSC,BIN,";
   wbuf += rate;
   wbuf += "\x0d\x0a";
   serial_port.write_some(buffer(wbuf));
   std::cout << "request: " << wbuf << std::endl;
 
-  sensor_msgs::Imu imu_msg;
   imu_msg.header.frame_id = "imu";
   imu_msg.orientation.x = 0.0;
   imu_msg.orientation.y = 0.0;
   imu_msg.orientation.z = 0.0;
   imu_msg.orientation.w = 1.0;
 
-  unsigned int counter;
-  int raw_data;
+  size_t counter;
+  int16_t raw_data;
+  int32_t raw_data_2;
 
   while (ros::ok())
   {
@@ -105,23 +152,24 @@ int main(int argc, char** argv)
     boost::asio::read_until(serial_port, response, "\n");
     std::string rbuf(boost::asio::buffers_begin(response.data()), boost::asio::buffers_end(response.data()));
 
-    if (rbuf[5] == 'R' && rbuf[6] == 'A' && rbuf[7] == 'W' && rbuf[8] == ',')
+    if (rbuf[5] == 'B' && rbuf[6] == 'I' && rbuf[7] == 'N' && rbuf[8] == ',')
     {
       imu_msg.header.stamp = ros::Time::now();
-
-      if (strcmp(imu_type.c_str(), "noGPS") == 0)
+      if (use_fog)
       {
-        counter = ((rbuf[11] << 24) & 0xFF000000) | ((rbuf[12] << 16) & 0x00FF0000) | ((rbuf[13] << 8) & 0x0000FF00) |
-                  (rbuf[14] & 0x000000FF);
-        raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
+        ROS_INFO_ONCE("BIN-w/FOG");
+        counter = ((rbuf[11] << 24) & 0xFF000000) | ((rbuf[12] << 16) & 0x00FF0000);
+        imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
+        raw_data = ((((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF)));
         imu_msg.angular_velocity.x =
-            raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-        raw_data = ((((rbuf[19] << 8) & 0xFFFFFF00) | (rbuf[20] & 0x000000FF)));
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+        raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
         imu_msg.angular_velocity.y =
             raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-        raw_data = ((((rbuf[21] << 8) & 0xFFFFFF00) | (rbuf[22] & 0x000000FF)));
+        raw_data_2 = ((rbuf[19] << 24) & 0xFF000000) | ((rbuf[20] << 16) & 0x00FF0000) | ((rbuf[21] << 8) & 0x0000FF00) |
+                  (rbuf[22] & 0x000000FF);
         imu_msg.angular_velocity.z =
-            raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+            raw_data_2 * (200 / pow(2, 31)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
         raw_data = ((((rbuf[23] << 8) & 0xFFFFFF00) | (rbuf[24] & 0x000000FF)));
         imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
         raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
@@ -130,9 +178,11 @@ int main(int argc, char** argv)
         imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
         pub.publish(imu_msg);
       }
-      else if (strcmp(imu_type.c_str(), "withGPS") == 0)
+      else
       {
+        ROS_INFO_ONCE("BIN-w/oFOG");
         counter = ((rbuf[11] << 8) & 0x0000FF00) | (rbuf[12] & 0x000000FF);
+        imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
         raw_data = ((((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF)));
         imu_msg.angular_velocity.x =
             raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
@@ -149,8 +199,9 @@ int main(int argc, char** argv)
         raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
         imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
         pub.publish(imu_msg);
+        //std::cout << counter << std::endl;
       }
-      //std::cout << counter << std::endl;
+      ready = true;
     }
   }
   return 0;

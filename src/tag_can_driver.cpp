@@ -29,12 +29,21 @@
  * Author MapIV Sekino
  */
 
+#include <iostream>
+
 #include "ros/ros.h"
 #include "can_msgs/Frame.h"
 #include "sensor_msgs/Imu.h"
+#include <diagnostic_updater/diagnostic_updater.h>
 
 static unsigned int counter;
 static int16_t raw_data;
+static int32_t raw_data2;
+static uint16_t imu_status;
+static bool use_fog;
+static bool ready = false;
+
+static diagnostic_updater::Updater* p_updater;
 
 static sensor_msgs::Imu imu_msg;
 static ros::Publisher pub;
@@ -44,21 +53,38 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
   if(msg->id == 0x319)
   {
     imu_msg.header.frame_id = "imu";
-    imu_msg.header.stamp = ros::Time::now();
+    imu_msg.header.stamp = msg->header.stamp;
 
-    counter = msg->data[1] + (msg->data[0] << 8);
-    raw_data = msg->data[3] + (msg->data[2] << 8);
-    imu_msg.angular_velocity.x =
+    if (use_fog) 
+    {
+      raw_data = msg->data[1] + (msg->data[0] << 8);
+      imu_msg.angular_velocity.x =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data = msg->data[3] + (msg->data[2] << 8);
+      imu_msg.angular_velocity.y =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data2 = (msg->data[7] + (msg->data[6] << 8)) + ((msg->data[5] << 16) + (msg->data[4] << 24));
+      imu_msg.angular_velocity.z =
+          raw_data2 * (200 / pow(2, 31)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+    }
+    else 
+    {
+      counter = msg->data[1] + (msg->data[0] << 8);
+      raw_data = msg->data[3] + (msg->data[2] << 8);
+      imu_msg.angular_velocity.x =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data = msg->data[5] + (msg->data[4] << 8);
+      imu_msg.angular_velocity.y =
+          raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+      raw_data = msg->data[7] + (msg->data[6] << 8);
+      imu_msg.angular_velocity.z =
         raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    raw_data = msg->data[5] + (msg->data[4] << 8);
-    imu_msg.angular_velocity.y =
-        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
-    raw_data = msg->data[7] + (msg->data[6] << 8);
-    imu_msg.angular_velocity.z =
-        raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
+    }
+    
   }
-  if(msg->id == 0x31A)
+  else if(msg->id == 0x31A)
   {
+    imu_status = msg->data[1] + (msg->data[0] << 8);
     raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
     raw_data = msg->data[5] + (msg->data[4] << 8);
@@ -71,17 +97,71 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
     imu_msg.orientation.z = 0.0;
     imu_msg.orientation.w = 1.0;
     pub.publish(imu_msg);
+
+    ready = true;
     //std::cout << counter << std::endl;
   }
+}
 
+uint8_t check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+
+  if (imu_status >> 15)
+  {
+    level = diagnostic_msgs::DiagnosticStatus::ERROR;
+    stat.add("Built-In Error", "ERROR");
+  }
+  else
+  {
+    stat.add("Built-In Error", "OK");
+  }
+
+  return level;
+}
+
+void check_sensor_status(diagnostic_updater::DiagnosticStatusWrapper& stat)
+{
+  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
+  uint8_t current_level;
+
+  current_level = check_bit_error(stat);
+  level = (current_level > 0) ? current_level: level;
+
+  if (level)
+  {
+    msg = "Problem Found. Check Details.";
+  }
+  stat.summary(level, msg);
+}
+
+void diagnostic_timer_callback(const ros::TimerEvent& event)
+{
+  if(ready)
+  {
+    p_updater->force_update();
+    ready = false;
+  }
 }
 
 int main(int argc, char **argv){
 
   ros::init(argc, argv, "tag_can_driver");
-  ros::NodeHandle n;
-  ros::Subscriber sub = n.subscribe("/imu/can_tx", 100, receive_can_callback);
-  pub = n.advertise<sensor_msgs::Imu>("/imu/data_raw", 100);
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
+
+  ros::Timer diagnostics_timer = nh.createTimer(ros::Duration(1.0), diagnostic_timer_callback);
+
+  pnh.param<bool>("use_fog", use_fog, false);
+
+  diagnostic_updater::Updater updater;
+  p_updater = &updater;
+  updater.setHardwareID("tamagawa_imu");
+  updater.add("Status", check_sensor_status);
+  
+  ros::Subscriber sub = nh.subscribe("imu/can_tx", 100, receive_can_callback);
+  pub = nh.advertise<sensor_msgs::Imu>("imu/data_raw", 100);
   ros::spin();
 
   return 0;

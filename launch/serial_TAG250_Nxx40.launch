@@ -1,7 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <launch>
+  <arg name="device" default="/dev/ttyUSB0" />
+  <arg name="imu_type" default="withGPS" />
+  <arg name="rate" default="50" />
+  <arg name="use_fog" default="false" />
 
-  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" args="/dev/ttyUSB0 withGPS 50" output="screen"/>
+  <node pkg="tamagawa_imu_driver" name="tag_serial_driver" type="tag_serial_driver" output="screen">
+    <param name="device" value="$(arg device)" />
+    <param name="imu_type" value="$(arg imu_type)" />
+    <param name="rate" value="$(arg rate)" />
+    <param name="use_fog" value="$(arg use_fog)" />
+  </node>
 
 </launch>
