@@ -3,7 +3,9 @@
 <launch>
   <arg name="use_fog" default="false" />
 
-  <node pkg="tamagawa_imu_driver" name="tag_can_driver" type="tag_can_driver" output="screen">
-    <param name="use_fog" value="$(arg use_fog)" />
-  </node>
+  <group ns="imu">
+    <node pkg="tamagawa_imu_driver" name="tag_can_driver" type="tag_can_driver" output="screen">
+      <param name="use_fog" value="$(arg use_fog)" />
+    </node>
+  </group>
 </launch>

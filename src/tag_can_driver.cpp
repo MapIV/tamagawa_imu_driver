@@ -157,11 +157,11 @@ int main(int argc, char **argv){
 
   diagnostic_updater::Updater updater;
   p_updater = &updater;
-  updater.setHardwareID("tamagawa_imu");
-  updater.add("Status", check_sensor_status);
+  updater.setHardwareID("tamagawa");
+  updater.add("imu_data", check_sensor_status);
   
-  ros::Subscriber sub = nh.subscribe("imu/can_tx", 100, receive_can_callback);
-  pub = nh.advertise<sensor_msgs::Imu>("imu/data_raw", 100);
+  ros::Subscriber sub = nh.subscribe("can_tx", 100, receive_can_callback);
+  pub = nh.advertise<sensor_msgs::Imu>("data_raw", 100);
   ros::spin();
 
   return 0;

@@ -104,15 +104,15 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "tag_serial_driver", ros::init_options::NoSigintHandler);
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
-  ros::Publisher pub = nh.advertise<sensor_msgs::Imu>("/imu/data_raw", 1000);
+  ros::Publisher pub = nh.advertise<sensor_msgs::Imu>("data_raw", 1000);
   io_service io;
 
   ros::Timer diagnostics_timer = nh.createTimer(ros::Duration(1.0), diagnostic_timer_callback);
 
   diagnostic_updater::Updater updater;
   p_updater = &updater;
-  updater.setHardwareID("tamagawa_imu");
-  updater.add("Status", check_sensor_status);
+  updater.setHardwareID("tamagawa");
+  updater.add("imu_data", check_sensor_status);
 
   pnh.param<std::string>("device", device, "/dev/ttyUSB0");
   pnh.param<std::string>("imu_type", imu_type, "noGPS");
