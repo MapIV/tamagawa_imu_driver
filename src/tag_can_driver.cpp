@@ -103,36 +103,32 @@ void receive_can_callback(const can_msgs::Frame::ConstPtr& msg){
   }
 }
 
-uint8_t check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+static void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
 {
   uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  std::string msg = "OK";
 
   if (imu_status >> 15)
   {
     level = diagnostic_msgs::DiagnosticStatus::ERROR;
-    stat.add("Built-In Error", "ERROR");
-  }
-  else
-  {
-    stat.add("Built-In Error", "OK");
+    msg = "Built-In Test error";
   }
 
-  return level;
+  stat.summary(level, msg);
 }
 
-void check_sensor_status(diagnostic_updater::DiagnosticStatusWrapper& stat)
+static void check_connection(diagnostic_updater::DiagnosticStatusWrapper& stat) 
 {
-  uint8_t level = diagnostic_msgs::DiagnosticStatus::OK;
+  size_t level = diagnostic_msgs::DiagnosticStatus::OK;
   std::string msg = "OK";
-  uint8_t current_level;
 
-  current_level = check_bit_error(stat);
-  level = (current_level > 0) ? current_level: level;
+  ros::Time now = ros::Time::now();
 
-  if (level)
-  {
-    msg = "Problem Found. Check Details.";
+  if (now - imu_msg.header.stamp > ros::Duration(1.0)) {
+    level = diagnostic_msgs::DiagnosticStatus::ERROR;
+    msg = "Message timeout";
   }
+
   stat.summary(level, msg);
 }
 
@@ -158,7 +154,8 @@ int main(int argc, char **argv){
   diagnostic_updater::Updater updater;
   p_updater = &updater;
   updater.setHardwareID("tamagawa");
-  updater.add("imu_data", check_sensor_status);
+  updater.add("imu_bit_error", check_bit_error);
+  updater.add("imu_connection", check_connection);
   
   ros::Subscriber sub = nh.subscribe("can_tx", 100, receive_can_callback);
   pub = nh.advertise<sensor_msgs::Imu>("data_raw", 100);
