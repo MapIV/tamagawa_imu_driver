@@ -55,7 +55,7 @@ int main(int argc, char** argv)
   rclcpp::init(argc, argv, init_options);
   std::string node_name = "tag_serial_driver";
   auto node = rclcpp::Node::make_shared(node_name);
-  auto pub = node->create_publisher<sensor_msgs::msg::Imu>("/imu/data_raw", 100);
+  auto pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
 
   io_service io;
 

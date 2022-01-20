@@ -80,8 +80,8 @@ int main(int argc, char **argv){
   rclcpp::init(argc, argv);
 
   auto node = rclcpp::Node::make_shared("tag_can_driver");
-  rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("/can/imu", 100, receive_CAN);
-  pub = node->create_publisher<sensor_msgs::msg::Imu>("/imu/data_raw", 100);
+  rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("imu/can_tx", 100, receive_CAN);
+  pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
   rclcpp::spin(node);
 
   return 0;
