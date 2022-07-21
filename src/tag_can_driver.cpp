@@ -32,9 +32,18 @@
 #include "rclcpp/rclcpp.hpp"
 #include "can_msgs/msg/frame.hpp"
 #include "sensor_msgs/msg/imu.hpp"
+#include "diagnostic_updater/diagnostic_updater.hpp"
+#include <chrono>
+
+
+using namespace std::chrono_literals;
 
 static unsigned int counter;
 static int16_t raw_data;
+static uint16_t imu_status;
+static bool ready = false;
+
+static diagnostic_updater::Updater* p_updater;
 
 static sensor_msgs::msg::Imu imu_msg;
 rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub;
@@ -59,6 +68,7 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
   }
   if(msg->id == 0x31A)
   {
+    imu_status = msg->data[1] + (msg->data[0] << 8);
     raw_data = msg->data[3] + (msg->data[2] << 8);
     imu_msg.linear_acceleration.x = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
     raw_data = msg->data[5] + (msg->data[4] << 8);
@@ -71,15 +81,66 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
     imu_msg.orientation.z = 0.0;
     imu_msg.orientation.w = 1.0;
     pub->publish(imu_msg);
+
+    ready = true;
     //std::cout << counter << std::endl;
   }
 
+
+}
+
+static void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  uint8_t level = 0; // OK
+  std::string msg = "OK";
+
+  if (imu_status >> 15)
+  {
+    level = 2; // ERROR
+    msg = "Built-In Test error";
+  }
+
+  stat.summary(level, msg);
+}
+
+static void check_connection(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  size_t level = 0; // OK
+  std::string msg = "OK";
+
+  auto now = rclcpp::Clock().now();
+
+  if (now - imu_msg.header.stamp > 1s) {
+    level = 2;
+    msg = "Message timeout";
+  }
+
+  stat.summary(level, msg);
+}
+
+void diagnostic_timer_callback()
+{
+  if(ready)
+  {
+    p_updater->force_update();
+    ready = false;
+  }
 }
 
 int main(int argc, char **argv){
   rclcpp::init(argc, argv);
 
   auto node = rclcpp::Node::make_shared("tag_can_driver");
+
+  auto ros_clock = rclcpp::Clock::make_shared();
+  auto diagnostics_timer = rclcpp::create_timer(node,ros_clock,1s, &diagnostic_timer_callback);
+
+  diagnostic_updater::Updater updater(node);
+  p_updater = &updater;
+  updater.setHardwareID("tamagawa");
+  updater.add("imu_bit_error", check_bit_error);
+  updater.add("imu_connection", check_connection);
+
   rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("imu/can_tx", 100, receive_CAN);
   pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
   rclcpp::spin(node);
