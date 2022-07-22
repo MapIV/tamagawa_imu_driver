@@ -75,7 +75,7 @@ static void check_connection(diagnostic_updater::DiagnosticStatusWrapper& stat)
   size_t level = 0; // OK
   std::string msg = "OK";
 
-  auto now = rclcpp::Clock().now();
+  auto now = rclcpp::Clock(RCL_ROS_TIME).now();
 
   if (now - imu_msg.header.stamp > 1s) {
     level = 2;
@@ -104,8 +104,8 @@ int main(int argc, char** argv)
   auto node = rclcpp::Node::make_shared(node_name);
   auto pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
 
-  auto ros_clock = rclcpp::Clock::make_shared();
-  auto diagnostics_timer = rclcpp::create_timer(node,ros_clock,1s, &diagnostic_timer_callback);
+  auto diagnostics_timer = rclcpp::create_timer(node,node->get_clock(),1s, &diagnostic_timer_callback);
+  // auto diagnostics_timer = node->create_wall_timer(1s, &diagnostic_timer_callback);
 
   diagnostic_updater::Updater updater(node);
   p_updater = &updater;
