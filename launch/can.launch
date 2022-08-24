@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <launch>
+  <arg name="use_fog" default="false"/>
+  <arg name="use_ros_system" default="true"/>
 
   <node pkg="tamagawa_imu_driver" name="tag_can_driver" exec="tag_can_driver">
-    <param name="use_fog" value="false"/>
+    <param name="use_fog" value="$(var use_fog)"/>
+    <param name="use_ros_system" value="$(var use_ros_system)"/>
   </node>
 
 </launch>

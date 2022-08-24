@@ -43,6 +43,7 @@ static int16_t raw_data;
 static int32_t raw_data2;
 static uint16_t imu_status;
 static bool use_fog;
+static bool use_ros_system;
 static bool ready = false;
 
 static diagnostic_updater::Updater* p_updater;
@@ -98,6 +99,15 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
     imu_msg.orientation.y = 0.0;
     imu_msg.orientation.z = 0.0;
     imu_msg.orientation.w = 1.0;
+
+    if (use_ros_system)
+    {
+      imu_msg.linear_acceleration.y *= -1.0;
+      imu_msg.linear_acceleration.z *= -1.0;
+      imu_msg.angular_velocity.y *= -1.0;
+      imu_msg.angular_velocity.z *= -1.0;
+    }
+
     pub->publish(imu_msg);
 
     ready = true;
@@ -152,8 +162,11 @@ int main(int argc, char **argv){
   // auto diagnostics_timer = node->create_wall_timer(1s, &diagnostic_timer_callback);
 
   node->declare_parameter("use_fog",false);
+  node->declare_parameter("use_ros_system",true);
   use_fog = node->get_parameter("use_fog").as_bool();
+  use_ros_system = node->get_parameter("use_ros_system").as_bool();
   RCLCPP_INFO(node->get_logger(), "use_fog: %d", use_fog);
+  RCLCPP_INFO(node->get_logger(), "use_ros_system: %d", use_ros_system);
 
   diagnostic_updater::Updater updater(node);
   p_updater = &updater;
