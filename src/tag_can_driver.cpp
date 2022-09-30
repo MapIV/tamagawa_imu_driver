@@ -50,6 +50,7 @@ static diagnostic_updater::Updater* p_updater;
 
 static sensor_msgs::msg::Imu imu_msg;
 rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub;
+rclcpp::Clock::SharedPtr ros_clock;
 
 void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
 
@@ -134,7 +135,7 @@ static void check_connection(diagnostic_updater::DiagnosticStatusWrapper& stat)
   size_t level = 0; // OK
   std::string msg = "OK";
 
-  auto now = rclcpp::Clock(RCL_ROS_TIME).now();
+  auto now = ros_clock->now();
 
   if (now - imu_msg.header.stamp > 1s) {
     level = 2;
@@ -157,6 +158,7 @@ int main(int argc, char **argv){
   rclcpp::init(argc, argv);
 
   auto node = rclcpp::Node::make_shared("tag_can_driver");
+  ros_clock = node->get_clock();
 
   auto diagnostics_timer = rclcpp::create_timer(node,node->get_clock(),1s, &diagnostic_timer_callback);
   // auto diagnostics_timer = node->create_wall_timer(1s, &diagnostic_timer_callback);
