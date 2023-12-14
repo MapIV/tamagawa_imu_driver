@@ -45,6 +45,9 @@ static uint16_t imu_status;
 static bool use_fog;
 static bool use_ros_system;
 static bool ready = false;
+static float cov_x = 0.0;
+static float cov_y = 0.0;
+static float cov_z = 0.0;
 
 static diagnostic_updater::Updater* p_updater;
 
@@ -108,6 +111,10 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
       imu_msg.angular_velocity.y *= -1.0;
       imu_msg.angular_velocity.z *= -1.0;
     }
+    
+    imu_msg.angular_velocity_covariance = {cov_x, 0 , 0,
+                                           0, cov_y, 0,
+                                           0, 0 , cov_z}; 
 
     pub->publish(imu_msg);
 
@@ -161,13 +168,21 @@ int main(int argc, char **argv){
   ros_clock = node->get_clock();
 
   auto diagnostics_timer = rclcpp::create_timer(node,node->get_clock(),1s, &diagnostic_timer_callback);
-  // auto diagnostics_timer = node->create_wall_timer(1s, &diagnostic_timer_callback);
 
   node->declare_parameter("use_fog",false);
+  node->declare_parameter("cov_x",0.0);
+  node->declare_parameter("cov_y",0.0);
+  node->declare_parameter("cov_z",0.0);
   node->declare_parameter("use_ros_system",true);
   use_fog = node->get_parameter("use_fog").as_bool();
+  cov_x = node->get_parameter("cov_x").as_double();
+  cov_y = node->get_parameter("cov_y").as_double();
+  cov_z = node->get_parameter("cov_z").as_double();
   use_ros_system = node->get_parameter("use_ros_system").as_bool();
   RCLCPP_INFO(node->get_logger(), "use_fog: %d", use_fog);
+  RCLCPP_INFO(node->get_logger(), "cov_x: %.4f", cov_x);
+  RCLCPP_INFO(node->get_logger(), "cov_x: %.4f", cov_y);
+  RCLCPP_INFO(node->get_logger(), "cov_x: %.4f", cov_z);
   RCLCPP_INFO(node->get_logger(), "use_ros_system: %d", use_ros_system);
 
   diagnostic_updater::Updater updater(node);

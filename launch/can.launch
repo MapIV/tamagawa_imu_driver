@@ -2,10 +2,16 @@
 
 <launch>
   <arg name="use_fog" default="false"/>
+  <arg name="cov_x" default="0.0"/>
+  <arg name="cov_y" default="0.0"/>
+  <arg name="cov_z" default="0.0"/>
   <arg name="use_ros_system" default="true"/>
 
   <node pkg="tamagawa_imu_driver" name="tag_can_driver" exec="tag_can_driver">
     <param name="use_fog" value="$(var use_fog)"/>
+    <param name="cov_x" value="$(var cov_x)"/>
+    <param name="cov_y" value="$(var cov_y)"/>
+    <param name="cov_z" value="$(var cov_z)"/>
     <param name="use_ros_system" value="$(var use_ros_system)"/>
   </node>
 
