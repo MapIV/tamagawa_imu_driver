@@ -41,21 +41,77 @@
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <boost/asio.hpp>
+#include "diagnostic_updater/diagnostic_updater.hpp"
+#include <chrono>
 
 using namespace boost::asio;
+using namespace std::chrono_literals;
 
 static std::string device = "/dev/ttyUSB0";
 static std::string imu_type = "noGPS";
 static std::string rate = "50";
+static bool ready = false;
+static int16_t imu_status;
+static sensor_msgs::msg::Imu imu_msg;
+
+static diagnostic_updater::Updater* p_updater;
+
+static void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  uint8_t level = 0; // OK
+  std::string msg = "OK";
+
+  if (imu_status >> 15)
+  {
+    level = 2; // ERROR
+    msg = "Built-In Test error";
+  }
+
+  stat.summary(level, msg);
+}
+
+static void check_connection(diagnostic_updater::DiagnosticStatusWrapper& stat) 
+{
+  size_t level = 0; // OK
+  std::string msg = "OK";
+
+  auto now = rclcpp::Clock(RCL_ROS_TIME).now();
+
+  if (now - imu_msg.header.stamp > 1s) {
+    level = 2;
+    msg = "Message timeout";
+  }
+
+  stat.summary(level, msg);
+}
+
+static void diagnostic_timer_callback()
+{
+  if(ready)
+  {
+    p_updater->force_update();
+    ready = false;
+  }
+}
+
 
 int main(int argc, char** argv)
 {
   auto init_options = rclcpp::InitOptions();
-  init_options.shutdown_on_sigint = false;
+  init_options.shutdown_on_signal = false;
   rclcpp::init(argc, argv, init_options);
   std::string node_name = "tag_serial_driver";
   auto node = rclcpp::Node::make_shared(node_name);
   auto pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
+
+  auto diagnostics_timer = rclcpp::create_timer(node,node->get_clock(),1s, &diagnostic_timer_callback);
+  // auto diagnostics_timer = node->create_wall_timer(1s, &diagnostic_timer_callback);
+
+  diagnostic_updater::Updater updater(node);
+  p_updater = &updater;
+  updater.setHardwareID("tamagawa");
+  updater.add("imu_bit_error", check_bit_error);
+  updater.add("imu_connection", check_connection);
 
   io_service io;
 
@@ -92,7 +148,6 @@ int main(int argc, char** argv)
   serial_port.write_some(buffer(wbuf));
   std::cout << "request: " << wbuf << std::endl;
 
-  sensor_msgs::msg::Imu imu_msg;
   imu_msg.header.frame_id = "imu";
   imu_msg.orientation.x = 0.0;
   imu_msg.orientation.y = 0.0;
@@ -117,6 +172,7 @@ int main(int argc, char** argv)
       {
         counter = ((rbuf[11] << 24) & 0xFF000000) | ((rbuf[12] << 16) & 0x00FF0000) | ((rbuf[13] << 8) & 0x0000FF00) |
                   (rbuf[14] & 0x000000FF);
+        imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
         raw_data = ((((rbuf[17] << 8) & 0xFFFFFF00) | (rbuf[18] & 0x000000FF)));
         imu_msg.angular_velocity.x =
             raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]
@@ -137,6 +193,7 @@ int main(int argc, char** argv)
       else if (strcmp(imu_type.c_str(), "withGPS") == 0)
       {
         counter = ((rbuf[11] << 8) & 0x0000FF00) | (rbuf[12] & 0x000000FF);
+        imu_status = ((rbuf[13] << 8) & 0xFFFFFF00) | (rbuf[14] & 0x000000FF);
         raw_data = ((((rbuf[15] << 8) & 0xFFFFFF00) | (rbuf[16] & 0x000000FF)));
         imu_msg.angular_velocity.x =
             raw_data * (200 / pow(2, 15)) * M_PI / 180;  // LSB & unit [deg/s] => [rad/s]

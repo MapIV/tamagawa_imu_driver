@@ -16,6 +16,8 @@
 	<depend>rclcpp_components</depend>
 	<depend>can_msgs</depend>
 	<depend>sensor_msgs</depend>
+	<depend>diagnostic_updater</depend>
+
 
 	<export>
 	  <build_type>ament_cmake</build_type>
