@@ -111,7 +111,7 @@ static void check_bit_error(diagnostic_updater::DiagnosticStatusWrapper& stat)
   if (imu_status >> 15)
   {
     level = diagnostic_msgs::DiagnosticStatus::ERROR;
-    msg = "Built-In Test error";
+    msg = "Built-In Test error :" + std::to_string(imu_status);
   }
 
   stat.summary(level, msg);
