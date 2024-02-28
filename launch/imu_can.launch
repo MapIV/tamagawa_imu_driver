@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<launch>
+  <arg name="can_device" default="can0"/>
+  <arg name="received_messages" default="can_tx"/>
+  <arg name="sent_messages" default="can_rx"/>
+
+  <arg name="use_fog" default="false" />
+  <arg name="data_raw" default="data_raw"/>
+
+  <node pkg="socketcan_bridge" name="socketcan_bridge_node" type="socketcan_bridge_node" output="screen">
+    <param name="can_device" value="$(arg can_device)"/>
+    <remap from="received_messages" to="$(arg received_messages)"/>
+    <remap from="sent_messages" to="$(arg sent_messages)"/>
+  </node>
+
+  <node pkg="tamagawa_imu_driver" name="tag_can_driver" type="tag_can_driver" output="screen">
+    <param name="use_fog" value="$(arg use_fog)" />
+    <remap from="can_tx" to="$(arg received_messages)"/>
+    <remap from="data_raw" to="$(arg data_raw)"/>
+  </node>
+</launch>
