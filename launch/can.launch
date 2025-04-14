@@ -6,6 +6,15 @@
   <arg name="cov_y" default="0.0"/>
   <arg name="cov_z" default="0.0"/>
   <arg name="use_ros_system" default="true"/>
+  <arg name="output_imu_topic" default="imu_data" />
+  <arg name="interface" default="can0" />
+  <arg name="launch_driver" default="True" />
+  
+  <include file="$(find-pkg-share ros2_socketcan)/launch/socket_can_bridge.launch.xml" if="$(var launch_driver)">
+    <arg name="interface" value="$(var interface)" />
+    <arg name="receiver_interval_sec" value="1.0" />
+    <arg name="sender_timeout_sec" value="0.02" />
+  </include>
 
   <node pkg="tamagawa_imu_driver" name="tag_can_driver" exec="tag_can_driver">
     <param name="use_fog" value="$(var use_fog)"/>
@@ -13,6 +22,8 @@
     <param name="cov_y" value="$(var cov_y)"/>
     <param name="cov_z" value="$(var cov_z)"/>
     <param name="use_ros_system" value="$(var use_ros_system)"/>
+    <remap from="imu/can_tx" to="from_can_bus" />
+    <remap from="imu/data_raw" to="$(var output_imu_topic)" />
   </node>
 
 </launch>
