@@ -17,6 +17,8 @@
 	<depend>can_msgs</depend>
 	<depend>sensor_msgs</depend>
 	<depend>diagnostic_updater</depend>
+	<depend>tf2</depend>
+	<depend>geoemtry_msgs</depend>
 
 
 	<export>
