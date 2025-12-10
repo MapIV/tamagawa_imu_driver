@@ -32,7 +32,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "can_msgs/msg/frame.hpp"
 #include "sensor_msgs/msg/imu.hpp"
-#include "geometry_msgs/msg/quaternion_stamped.hpp"
 #include <tf2/LinearMath/Quaternion.h>
 #include "diagnostic_updater/diagnostic_updater.hpp"
 #include <chrono>
@@ -54,9 +53,7 @@ static float cov_z = 0.0;
 static diagnostic_updater::Updater* p_updater;
 
 static sensor_msgs::msg::Imu imu_msg;
-static geometry_msgs::msg::QuaternionStamped quat_msg;
 rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub;
-rclcpp::Publisher<geometry_msgs::msg::QuaternionStamped>::SharedPtr quat_pub;
 rclcpp::Clock::SharedPtr ros_clock;
 
 void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
@@ -102,33 +99,11 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
     imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
     raw_data = msg->data[7] + (msg->data[6] << 8);
     imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
-
-    imu_msg.orientation.x = 0.0;
-    imu_msg.orientation.y = 0.0;
-    imu_msg.orientation.z = 0.0;
-    imu_msg.orientation.w = 1.0;
-
-    if (use_ros_system)
-    {
-      imu_msg.linear_acceleration.y *= -1.0;
-      imu_msg.linear_acceleration.z *= -1.0;
-      imu_msg.angular_velocity.y *= -1.0;
-      imu_msg.angular_velocity.z *= -1.0;
-    }
-    
-    imu_msg.angular_velocity_covariance = {cov_x, 0 , 0,
-                                           0, cov_y, 0,
-                                           0, 0 , cov_z}; 
-
-    pub->publish(imu_msg);
-
-    ready = true;
-    //std::cout << counter << std::endl;
   }
   else if(msg->id == 0x31B)
   {
-    // Parse 0x31B: input velocity, roll, pitch, yaw
-    // Byte 0,1: input velocity (LSB: 0.01 m/s) - not used for quaternion
+    // Parse 0x31B: input velocity, roll, pitch, yaw (last message in sequence)
+    // Byte 0,1: input velocity (LSB: 0.01 m/s) - not used
     // Byte 2,3: roll angle (LSB: 180/2^15 deg)
     // Byte 4,5: pitch angle (LSB: 180/2^15 deg)
     // Byte 6,7: yaw angle (LSB: 180/2^15 deg)
@@ -148,18 +123,29 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
       yaw *= -1.0;
     }
     
-    // Convert Euler angles to quaternion
+    // Set orientation from RPY
     tf2::Quaternion q;
     q.setRPY(roll, pitch, yaw);
+    imu_msg.orientation.x = q.x();
+    imu_msg.orientation.y = q.y();
+    imu_msg.orientation.z = q.z();
+    imu_msg.orientation.w = q.w();
+
+    if (use_ros_system)
+    {
+      imu_msg.linear_acceleration.y *= -1.0;
+      imu_msg.linear_acceleration.z *= -1.0;
+      imu_msg.angular_velocity.y *= -1.0;
+      imu_msg.angular_velocity.z *= -1.0;
+    }
     
-    quat_msg.header.frame_id = "imu";
-    quat_msg.header.stamp = msg->header.stamp;
-    quat_msg.quaternion.x = q.x();
-    quat_msg.quaternion.y = q.y();
-    quat_msg.quaternion.z = q.z();
-    quat_msg.quaternion.w = q.w();
-    
-    quat_pub->publish(quat_msg);
+    imu_msg.angular_velocity_covariance = {cov_x, 0 , 0,
+                                           0, cov_y, 0,
+                                           0, 0 , cov_z}; 
+
+    pub->publish(imu_msg);
+
+    ready = true;
   }
 }
 
@@ -233,7 +219,6 @@ int main(int argc, char **argv){
 
   rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("imu/can_tx", 100, receive_CAN);
   pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
-  quat_pub = node->create_publisher<geometry_msgs::msg::QuaternionStamped>("imu/quaternion", 100);
   rclcpp::spin(node);
 
   return 0;

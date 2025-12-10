@@ -6,6 +6,8 @@
   <arg name="cov_y" default="0.0"/>
   <arg name="cov_z" default="0.0"/>
   <arg name="use_ros_system" default="true"/>
+  <arg name="input_can_topic" default="imu/can_tx"/>
+  <arg name="imu_output_topic" default="imu/data_raw"/>
 
   <node pkg="tamagawa_imu_driver" name="tag_can_driver" exec="tag_can_driver">
     <param name="use_fog" value="$(var use_fog)"/>
@@ -13,6 +15,8 @@
     <param name="cov_y" value="$(var cov_y)"/>
     <param name="cov_z" value="$(var cov_z)"/>
     <param name="use_ros_system" value="$(var use_ros_system)"/>
+    <remap from="imu/can_tx" to="$(var input_can_topic)"/>
+    <remap from="imu/data_raw" to="$(var imu_output_topic)"/>
   </node>
 
 </launch>
