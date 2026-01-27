@@ -59,7 +59,7 @@ void receive_CAN(const can_msgs::msg::Frame::ConstSharedPtr msg){
 
   if(msg->id == 0x319)
   {
-    imu_msg.header.frame_id = "imu";
+    imu_msg.header.frame_id = "tamagawa/imu_link";
     imu_msg.header.stamp = msg->header.stamp;
 
     if (use_fog) 
@@ -191,7 +191,7 @@ int main(int argc, char **argv){
   updater.add("imu_bit_error", check_bit_error);
   updater.add("imu_connection", check_connection);
 
-  rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("imu/can_tx", 100, receive_CAN);
+  rclcpp::Subscription<can_msgs::msg::Frame>::SharedPtr sub = node->create_subscription<can_msgs::msg::Frame>("from_can_bus", 100, receive_CAN);
   pub = node->create_publisher<sensor_msgs::msg::Imu>("imu/data_raw", 100);
   rclcpp::spin(node);
 
