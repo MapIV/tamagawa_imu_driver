@@ -113,7 +113,7 @@ int main(int argc, char** argv)
   updater.add("imu_bit_error", check_bit_error);
   updater.add("imu_connection", check_connection);
 
-  io_service io;
+  io_context io;
 
   // Use configured device
   if (argc == 4)
