@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(tamagawa_imu_driver)
 
-SET(CMAKE_CXX_FLAGS "-std=c++11 -O2 -g -Wall ${CMAKE_CXX_FLAGS}")
+SET(CMAKE_CXX_FLAGS "-std=c++17 -O2 -g -Wall ${CMAKE_CXX_FLAGS}")
 
 find_package(catkin REQUIRED COMPONENTS
   can_msgs

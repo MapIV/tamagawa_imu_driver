@@ -101,7 +101,7 @@ int main(int argc, char** argv)
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
   ros::Publisher pub = nh.advertise<sensor_msgs::Imu>("data_raw", 1000);
-  io_service io;
+  io_context io;
 
   ros::Timer diagnostics_timer = nh.createTimer(ros::Duration(1.0), diagnostic_timer_callback);
 
