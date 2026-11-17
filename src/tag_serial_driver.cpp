@@ -43,6 +43,8 @@
 #include <boost/asio.hpp>
 #include "diagnostic_updater/diagnostic_updater.hpp"
 #include <chrono>
+#include <cctype>
+#include <cstdlib>
 
 using namespace boost::asio;
 using namespace std::chrono_literals;
@@ -94,6 +96,78 @@ static void diagnostic_timer_callback()
   }
 }
 
+// Frame format (measured on $TSC,RAW output):
+//   "$TSC,RAW," | length (2 bytes, big endian) | payload | '*' | checksum (2 hex chars) | CR LF
+// length counts the bytes from the length field up to (not including) '*'.
+// checksum is the XOR of the bytes between '$' and '*' (NMEA style).
+static constexpr size_t kLengthPos = 9;
+static constexpr size_t kMinLength = 18;  // the withGPS parser reads up to byte 26
+static constexpr size_t kMaxLength = 256;
+
+static bool is_valid_frame(const std::string& buf, size_t star_pos, size_t frame_len)
+{
+  if (buf[star_pos] != '*' || buf[frame_len - 2] != '\r' || buf[frame_len - 1] != '\n')
+  {
+    return false;
+  }
+  if (!isxdigit(buf[star_pos + 1]) || !isxdigit(buf[star_pos + 2]))
+  {
+    return false;
+  }
+  uint8_t checksum = 0;
+  for (size_t i = 1; i < star_pos; ++i)
+  {
+    checksum ^= static_cast<uint8_t>(buf[i]);
+  }
+  return checksum == std::strtol(buf.substr(star_pos + 1, 2).c_str(), nullptr, 16);
+}
+
+// Read one frame from the IMU.
+// The binary payload may contain 0x0A, so frames are delimited by the header and the length
+// field instead of '\n'. Bytes read beyond the returned frame are kept in buf.
+static std::string read_frame(serial_port& port, std::string& buf, const std::string& header)
+{
+  char tmp[256];
+  while (true)
+  {
+    size_t pos = buf.find(header);
+    if (pos == std::string::npos)
+    {
+      // Keep a possibly partial header at the tail
+      if (buf.size() >= header.size())
+      {
+        buf.erase(0, buf.size() - (header.size() - 1));
+      }
+    }
+    else
+    {
+      buf.erase(0, pos);
+      if (buf.size() >= kLengthPos + 2)
+      {
+        size_t length = (static_cast<uint8_t>(buf[kLengthPos]) << 8) | static_cast<uint8_t>(buf[kLengthPos + 1]);
+        size_t star_pos = kLengthPos + length;
+        size_t frame_len = star_pos + 5;  // '*' + 2 checksum chars + CR LF
+        bool length_ok = (kMinLength <= length && length <= kMaxLength);
+        if (!length_ok || buf.size() >= frame_len)
+        {
+          if (length_ok && is_valid_frame(buf, star_pos, frame_len))
+          {
+            std::string frame = buf.substr(0, frame_len);
+            buf.erase(0, frame_len);
+            return frame;
+          }
+          // Broken frame: drop the leading '$' and resync to the next header
+          RCLCPP_WARN(rclcpp::get_logger("tag_serial_driver"), "Invalid frame (length=%zu), resyncing", length);
+          buf.erase(0, 1);
+          continue;
+        }
+      }
+    }
+    size_t n = port.read_some(buffer(tmp));
+    buf.append(tmp, n);
+  }
+}
+
 
 int main(int argc, char** argv)
 {
@@ -106,6 +180,10 @@ int main(int argc, char** argv)
 
   auto diagnostics_timer = rclcpp::create_timer(node,node->get_clock(),1s, &diagnostic_timer_callback);
   // auto diagnostics_timer = node->create_wall_timer(1s, &diagnostic_timer_callback);
+
+  node->declare_parameter("use_ros_system",true);
+  bool use_ros_system = node->get_parameter("use_ros_system").as_bool();
+  RCLCPP_INFO(node->get_logger(), "use_ros_system: %d", use_ros_system);
 
   diagnostic_updater::Updater updater(node);
   p_updater = &updater;
@@ -157,12 +235,13 @@ int main(int argc, char** argv)
   unsigned int counter;
   int raw_data;
 
+  const std::string header = "$TSC,RAW,";
+  std::string serial_buf;
+
   while (rclcpp::ok())
   {
     //ros::spinOnce();
-    boost::asio::streambuf response;
-    boost::asio::read_until(serial_port, response, "\n");
-    std::string rbuf(boost::asio::buffers_begin(response.data()), boost::asio::buffers_end(response.data()));
+    std::string rbuf = read_frame(serial_port, serial_buf, header);
 
     if (rbuf[5] == 'R' && rbuf[6] == 'A' && rbuf[7] == 'W' && rbuf[8] == ',')
     {
@@ -209,6 +288,15 @@ int main(int argc, char** argv)
         imu_msg.linear_acceleration.y = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
         raw_data = ((((rbuf[25] << 8) & 0xFFFFFF00) | (rbuf[26] & 0x000000FF)));
         imu_msg.linear_acceleration.z = raw_data * (100 / pow(2, 15));  // LSB & unit [m/s^2]
+
+        if (use_ros_system)
+        {
+          imu_msg.linear_acceleration.y *= -1.0;
+          imu_msg.linear_acceleration.z *= -1.0;
+          imu_msg.angular_velocity.y *= -1.0;
+          imu_msg.angular_velocity.z *= -1.0;
+        }
+
         pub->publish(imu_msg);
       }
       //std::cout << counter << std::endl;
