@@ -193,21 +193,22 @@ int main(int argc, char** argv)
 
   io_service io;
 
-  // Use configured device
-  if (argc == 4)
+  // Use configured device (ROS arguments such as --ros-args added by launch are excluded)
+  std::vector<std::string> args = rclcpp::remove_ros_arguments(argc, argv);
+  if (args.size() == 4)
   {
-    device = argv[1];
-    imu_type = argv[2];
-    rate = argv[3];
+    device = args[1];
+    imu_type = args[2];
+    rate = args[3];
   }
-  else if (argc == 3)
+  else if (args.size() == 3)
   {
-    device = argv[1];
-    imu_type = argv[2];
+    device = args[1];
+    imu_type = args[2];
   }
-  else if (argc == 2)
+  else if (args.size() == 2)
   {
-    device = argv[1];
+    device = args[1];
   }
 
   std::cout << "device= " << device << " imu_type= " << imu_type << " rate= " << rate << std::endl;
